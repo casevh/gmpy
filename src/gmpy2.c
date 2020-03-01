@@ -395,6 +395,11 @@
  *    2.1.0b3
  *    Version bump only.
  *
+ *    2.1.04b
+ *    Fix comparisons with mpq and custom rational objects.
+ *    Fixes for some uncommon integer conversions scenarios.
+ *
+ *
  ************************************************************************
  *
  * Discussion on sizes of C integer types.
@@ -454,7 +459,7 @@
 
 /* The following global strings are used by gmpy_misc.c. */
 
-char gmpy_version[] = "2.1.0b3";
+char gmpy_version[] = "2.1.0b4";
 
 char gmpy_license[] = "\
 The GMPY2 source code is licensed under LGPL 3 or later. The supported \
@@ -589,6 +594,7 @@ static PyObject *GMPyExc_Erange = NULL;
 #include "gmpy2_mpq_misc.c"
 #include "gmpy2_mpz_misc.c"
 #include "gmpy2_xmpz_misc.c"
+#include "gmpy2_xmpz_limbs.c"
 
 #ifdef VECTOR
 #include "gmpy2_vector.c"
@@ -862,7 +868,7 @@ static PyMethodDef Pygmpy_methods [] =
 };
 
 static char _gmpy_docs[] =
-"gmpy2 2.1.0b2 - General Multiple-precision arithmetic for Python\n"
+"gmpy2 2.1.0b4 - General Multiple-precision arithmetic for Python\n"
 "\n"
 "gmpy2 supports several multiple-precision libraries. Integer and\n"
 "rational arithmetic is provided by the GMP library. Real floating-\n"
@@ -1113,6 +1119,11 @@ PyMODINIT_FUNC initgmpy2(void)
 
     Py_INCREF(&XMPZ_Type);
     PyModule_AddObject(gmpy_module, "xmpz", (PyObject*)&XMPZ_Type);
+
+    PyObject* xmpz = XMPZ_Type.tp_dict;
+    PyObject* limb_size = PyIntOrLong_FromSize_t(sizeof(mp_limb_t));
+    PyDict_SetItemString(xmpz, "limb_size", limb_size);
+    Py_DECREF(limb_size);
 
     /* Add the MPQ type to the module namespace. */
 
