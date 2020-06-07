@@ -8,7 +8,7 @@
  *           2008, 2009 Alex Martelli                                      *
  *                                                                         *
  * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019 Case Van Horsen                  *
+ *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -385,8 +385,8 @@ GMPy_Integer_AsLongLongAndError(PyObject *obj, int *error)
             else {
                 *error = sign;
             }
-        return res;
         }
+        return res;
     }
 
     if (HAS_STRICT_MPZ_CONVERSION(obj)) {
@@ -410,8 +410,8 @@ GMPy_Integer_AsLongLongAndError(PyObject *obj, int *error)
                 }
             }
             Py_XDECREF((PyObject*)temp_mpz);
-            return res;
         }
+        return res;
     }
 
     *error = 2;
@@ -485,8 +485,8 @@ GMPy_Integer_AsUnsignedLongLongAndError(PyObject *obj, int *error)
             else {
                 *error = 1;
             }
-        return res;
         }
+        return res;
     }
 
     if (HAS_STRICT_MPZ_CONVERSION(obj)) {
@@ -506,8 +506,8 @@ GMPy_Integer_AsUnsignedLongLongAndError(PyObject *obj, int *error)
                 *error = 1;
             }
             Py_XDECREF((PyObject*)temp_mpz);
-            return res;
         }
+        return res;
     }
 
     *error = 2;

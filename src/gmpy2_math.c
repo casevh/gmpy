@@ -8,7 +8,7 @@
  *           2008, 2009 Alex Martelli                                      *
  *                                                                         *
  * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019 Case Van Horsen                  *
+ *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -1996,9 +1996,21 @@ GMPy_Context_Factorial(PyObject *self, PyObject *other)
         return NULL;
     }
 
+    /* Force result to be 'inf' if n >= 44787928. The matches the behavior of
+     * MPFR compiled on 64-bit Linux. MPFR compiled on 32-bit Linux and both 32
+     * and 64-bit versions of Windows will enter an infinite loop. The constant
+     * 44787929 occurs in the MPFR file gamma.c.
+     */
+
     mpfr_clear_flags();
 
-    mpfr_fac_ui(result->f, n, GET_MPFR_ROUND(context));
+    if (n >= 44787928) {
+        mpfr_set_inf(result->f, 1);
+        mpfr_set_overflow();
+    }
+    else {
+        mpfr_fac_ui(result->f, n, GET_MPFR_ROUND(context));
+    }
 
     _GMPy_MPFR_Cleanup(&result, context);
     return (PyObject*)result;

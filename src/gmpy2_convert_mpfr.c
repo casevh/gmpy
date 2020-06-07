@@ -8,7 +8,7 @@
  *           2008, 2009 Alex Martelli                                      *
  *                                                                         *
  * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019 Case Van Horsen                  *
+ *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -564,22 +564,33 @@ GMPy_XMPZ_From_MPFR(MPFR_Object *self, CTXT_Object *context)
 }
 
 /* Return the simpliest rational number that approximates 'self' to the
- * requested precision 'err'. If 'err' is negative, then the requested
+ * requested error bound.
+ *
+ * 'bits' is used as the working precision for the calculations.
+ *   - If (bits == 0) then the precision of 'self' is used.
+ *   - If (bits > precision of 'self') then use precision of 'self'.
+ *
+ * 'err' is the maximum error in the rational approximation.
+ *   - If (err > 0) then prec
+ *   - If (err == NULL), then the requested precision is 1/(2**prec).
+ *       This should return the smallest fraction that returns the
+ *       same interval that includes 'self'.
+ *  'err'. If 'err' is negative, then the requested
  * precision is -2**abs(int(err)). If 'err' is NULL, then the requested
  * precision is -2**prec. If 'prec' is 0, then the requested precision is
  * the precision of 'self'.
  */
 
+
 static PyObject *
-stern_brocot(MPFR_Object* self, MPFR_Object *err, mpfr_prec_t prec, int mayz, CTXT_Object *context)
+stern_brocot(MPFR_Object* self, MPFR_Object *err, mpfr_prec_t bits, int mayz, CTXT_Object *context)
 {
-    PyObject *result = NULL;
+    PyObject* result = NULL;
+    MPQ_Object *mpqres = NULL;
+    MPZ_Object *mpzres = NULL;
+
     int i, negative, errsign;
-    mpfr_t f, al, a, r1[3], r2[3], minerr, curerr, newerr, temp;
-
-    CHECK_CONTEXT(context);
-
-#define F2Q_PREC 20
+    mpfr_t f, al, a, r1[3], r2[3], temperr, minerr, curerr, newerr, temp;
 
     if (mpfr_nan_p(self->f)) {
         VALUE_ERROR("Cannot convert NaN to a number.");
@@ -591,32 +602,58 @@ stern_brocot(MPFR_Object* self, MPFR_Object *err, mpfr_prec_t prec, int mayz, CT
         return NULL;
     }
 
-    if (prec == 0)
-        prec = mpfr_get_prec(self->f);
-
-    errsign = err ? mpfr_sgn(err->f) : 0;
-    if (errsign < 0)
-        prec = (mpfr_prec_t)(-mpfr_get_si(err->f, MPFR_RNDN));
-
-    if (errsign <= 0 && (prec < 2 || prec > mpfr_get_prec(self->f))) {
-        VALUE_ERROR("Requested precision out-of-bounds.");
-        return NULL;
+    if (!bits) {
+        bits = mpfr_get_prec(self->f);
     }
 
-    if (!(result = (PyObject*)GMPy_MPQ_New(context))) {
-        return NULL;
-    }
-
-    mpfr_init2(minerr, F2Q_PREC);
-    if (errsign <= 0) {
-        mpfr_set_ui(minerr, 1, MPFR_RNDN);
-        mpfr_div_2si(minerr, minerr, prec, MPFR_RNDN);
+    if (err) {
+        /* Make a copy. */
+        mpfr_init2(temperr, mpfr_get_prec(err->f));
+        mpfr_set(temperr, err->f, MPFR_RNDN);
     }
     else {
-        mpfr_set(minerr, err->f, MPFR_RNDN);
+        mpfr_init2(temperr, mpfr_get_prec(self->f));
+        mpfr_set_ui(temperr, 0, MPFR_RNDN);
     }
 
-    mpfr_init2(f, prec);
+    errsign = mpfr_sgn(temperr);
+    if (errsign <= 0 && (bits < 2 || bits > mpfr_get_prec(self->f))) {
+        VALUE_ERROR("Requested precision out-of-bounds.");
+        mpfr_clear(temperr);
+        return NULL;
+    }
+
+    if (errsign == 0) {
+        mpfr_set_si(temperr, 1, MPFR_RNDN);
+        mpfr_div_2exp(temperr, temperr, bits, MPFR_RNDN);
+    }
+    else if (errsign < 0) {
+        long ubits;
+        mpfr_abs(temperr, temperr, MPFR_RNDN);
+        mpfr_floor(temperr, temperr);
+        ubits = mpfr_get_si(temperr, MPFR_RNDN);
+        if (ubits < 2 || ubits > mpfr_get_prec(self->f)) {
+            VALUE_ERROR("Requested precision out-of-bounds.");
+            mpfr_clear(temperr);
+            return NULL;
+        }
+        mpfr_set_si(temperr, 1, MPFR_RNDN);
+        mpfr_div_2exp(temperr, temperr, ubits, MPFR_RNDN);
+    }
+
+    if (!(mpqres = GMPy_MPQ_New(context)) ||
+        !(mpzres = GMPy_MPZ_New(context))) {
+        Py_XDECREF((PyObject*)mpqres);
+        Py_XDECREF((PyObject*)mpzres);
+        mpfr_clear(temperr);
+        return NULL;
+    }
+
+    mpfr_init2(minerr, bits);
+    mpfr_set(minerr, temperr, MPFR_RNDN);
+    mpfr_clear(temperr);
+
+    mpfr_init2(f, bits);
     if (mpfr_sgn(self->f) < 0) {
         negative = 1;
         mpfr_abs(f, self->f, MPFR_RNDN);
@@ -626,39 +663,43 @@ stern_brocot(MPFR_Object* self, MPFR_Object *err, mpfr_prec_t prec, int mayz, CT
         mpfr_set(f, self->f, MPFR_RNDN);
     }
 
-    mpfr_init2(al, prec);
+    mpfr_init2(al, bits);
     mpfr_set(al, f, MPFR_RNDN);
-    mpfr_init2(a, prec);
+    mpfr_init2(a, bits);
     mpfr_floor(a, al);
-    mpfr_init2(temp, prec);
+    mpfr_init2(temp, bits);
     for (i=0; i<3; ++i) {
-        mpfr_init2(r1[i], prec);
-        mpfr_init2(r2[i], prec);
+        mpfr_init2(r1[i], bits);
+        mpfr_init2(r2[i], bits);
     }
+
     mpfr_set_si(r1[0], 0, MPFR_RNDN);
     mpfr_set_si(r1[1], 0, MPFR_RNDN);
     mpfr_set_si(r1[2], 1, MPFR_RNDN);
     mpfr_set_si(r2[0], 0, MPFR_RNDN);
     mpfr_set_si(r2[1], 1, MPFR_RNDN);
     mpfr_set(r2[2], a, MPFR_RNDN);
-    mpfr_init2(curerr, F2Q_PREC);
-    mpfr_init2(newerr, F2Q_PREC);
+    mpfr_init2(curerr, bits);
+    mpfr_init2(newerr, bits);
     mpfr_reldiff(curerr, f, a, MPFR_RNDN);
+
     while (mpfr_cmp(curerr, minerr) > 0) {
         mpfr_sub(temp, al, a, MPFR_RNDN);
         mpfr_ui_div(al, 1, temp, MPFR_RNDN);
         mpfr_floor(a, al);
         mpfr_swap(r1[0], r1[1]);
         mpfr_swap(r1[1], r1[2]);
-        mpfr_mul(r1[2], r1[1], a, MPFR_RNDN);
-        mpfr_add(r1[2], r1[2], r1[0], MPFR_RNDN);
+        mpfr_fma(r1[2], r1[1], a, r1[0], MPFR_RNDN);
+        //mpfr_mul(r1[2], r1[1], a, MPFR_RNDN);
+        //mpfr_add(r1[2], r1[2], r1[0], MPFR_RNDN);
         mpfr_swap(r2[0], r2[1]);
         mpfr_swap(r2[1], r2[2]);
-        mpfr_mul(r2[2], r2[1], a, MPFR_RNDN);
-        mpfr_add(r2[2], r2[2], r2[0], MPFR_RNDN);
+        mpfr_fma(r2[2], r2[1], a, r2[0], MPFR_RNDN);
+        //mpfr_mul(r2[2], r2[1], a, MPFR_RNDN);
+        //mpfr_add(r2[2], r2[2], r2[0], MPFR_RNDN);
         mpfr_div(temp, r2[2], r1[2], MPFR_RNDN);
         mpfr_reldiff(newerr, f, temp, MPFR_RNDN);
-        if (mpfr_cmp(curerr, newerr) <= 0) {
+        if(mpfr_cmp(curerr, newerr) <= 0) {
             mpfr_swap(r1[1],r1[2]);
             mpfr_swap(r2[1],r2[2]);
             break;
@@ -666,18 +707,26 @@ stern_brocot(MPFR_Object* self, MPFR_Object *err, mpfr_prec_t prec, int mayz, CT
         mpfr_swap(curerr, newerr);
     }
 
+    /* Note: both mpqres and mpzrec have been created. Remember to delete the
+     * one you don't need.
+     */
+
     if (mayz && (mpfr_cmp_ui(r1[2],1) == 0)) {
-        Py_DECREF(result);
-        result = (PyObject*)GMPy_MPZ_New(context);
-        mpfr_get_z(MPZ(result), r2[2], MPFR_RNDN);
-        if (negative)
-            mpz_neg(MPZ(result), MPZ(result));
+        mpfr_get_z(mpzres->z, r2[2], MPFR_RNDN);
+        if (negative) {
+            mpz_neg(mpzres->z, mpzres->z);
+        }
+        result = (PyObject*)mpzres;
+        Py_DECREF(mpqres);
     }
     else {
-        mpfr_get_z(mpq_numref(MPQ(result)), r2[2], MPFR_RNDN);
-        mpfr_get_z(mpq_denref(MPQ(result)), r1[2], MPFR_RNDN);
-        if (negative)
-            mpz_neg(mpq_numref(MPQ(result)), mpq_numref(MPQ(result)));
+        mpfr_get_z(mpq_numref(mpqres->q), r2[2], MPFR_RNDN);
+        mpfr_get_z(mpq_denref(mpqres->q), r1[2], MPFR_RNDN);
+        if (negative) {
+            mpz_neg(mpq_numref(mpqres->q), mpq_numref(mpqres->q));
+        }
+        result = (PyObject*)mpqres;
+        Py_DECREF(mpzres);
     }
 
     mpfr_clear(minerr);

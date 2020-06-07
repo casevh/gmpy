@@ -8,7 +8,7 @@
  *           2008, 2009 Alex Martelli                                      *
  *                                                                         *
  * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019 Case Van Horsen                  *
+ *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -395,9 +395,16 @@
  *    2.1.0b3
  *    Version bump only.
  *
- *    2.1.04b
+ *    2.1.0b4
  *    Fix comparisons with mpq and custom rational objects.
  *    Fixes for some uncommon integer conversions scenarios.
+ *
+ *    2.1.0b5
+ *    Avoid MPFR bug in mfr_fac_ui (gmpy2.factorial) on platforms where long
+ *        is 32-bits and argument is >= 44787929.
+ *    Fixed testing bugs with Python 2.7.
+ *    Fixed mpz(0) to C long or long long.
+ *    Fixed incorrect results in f2q().
  *
  *
  ************************************************************************
@@ -459,7 +466,7 @@
 
 /* The following global strings are used by gmpy_misc.c. */
 
-char gmpy_version[] = "2.1.0b4";
+char gmpy_version[] = "2.1.0b5";
 
 char gmpy_license[] = "\
 The GMPY2 source code is licensed under LGPL 3 or later. The supported \
@@ -868,7 +875,7 @@ static PyMethodDef Pygmpy_methods [] =
 };
 
 static char _gmpy_docs[] =
-"gmpy2 2.1.0b4 - General Multiple-precision arithmetic for Python\n"
+"gmpy2 2.1.0b5 - General Multiple-precision arithmetic for Python\n"
 "\n"
 "gmpy2 supports several multiple-precision libraries. Integer and\n"
 "rational arithmetic is provided by the GMP library. Real floating-\n"
@@ -937,7 +944,7 @@ PyMODINIT_FUNC initgmpy2(void)
 
     /* Validate the sizes of the various typedef'ed integer types. */
 
-#if defined _WIN64 && (MPIR || MSYS2)
+#if defined _WIN64 && MPIR
     if (sizeof(mp_bitcnt_t) != sizeof(PY_LONG_LONG)) {
         /* LCOV_EXCL_START */
         SYSTEM_ERROR("Size of PY_LONG_LONG and mp_bitcnt_t not compatible (_WIN64 && MPIR)");

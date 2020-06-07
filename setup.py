@@ -20,9 +20,8 @@ class Gmpy2Build(build_ext):
         ('gcov', None, "Enable GCC code coverage collection"),
         ('vector', None, "Include the vector_XXX() functions;"
          "they are unstable and under active development"),
-        ('mpir', None, "Enable use of mpir library instead of gmp."
-         "gmp is the default on Posix systems while mpir the default on"
-         "Windows and MSVC. Deprecated; will be removed."),
+        ('mpir', None, "Specifies use of MPIR and MSVC on Windows."
+         "Ignored on other operating systems."),
         ('static', None, "Enable static linking compile time options."),
         ('static-dir=', None, "Enable static linking and specify location."),
         ('gdb', None, "Build with debug symbols."),
@@ -64,22 +63,21 @@ class Gmpy2Build(build_ext):
 
     def build_extensions(self):
         compiler = self.compiler.compiler_type
-        if compiler == 'mingw32':
-            _comp_args.append('DMSYS2=1')
+        if compiler == 'msvc':
             if self.mpir:
-                _comp_args.append('DMPIR=1')
-                self.libraries.append('mpir')
-                if 'gmp' in self.libraries:
-                    self.libraries.remove('gmp')
-        elif self.mpir or ON_WINDOWS:
-            # --mpir or on Windows and MSVC
+                if self.static:
+                    self.extensions[0].libraries.extend(['mpir_static', 'mpfr_static', 'mpc_static'])
+                else:
+                    self.extensions[0].libraries.extend(['mpir', 'mpfr', 'mpc'])
+            else:
+                self.extensions[0].libraries.extend(['gmp', 'mpfr', 'mpc'])
             _comp_args.append('DMPIR=1')
-            self.libraries.append('mpir')
-            if 'gmp' in self.libraries:
-                self.libraries.remove('gmp')
-            if ON_WINDOWS and not self.static:
+            if not self.static:
                 # MSVC shared build
                 _comp_args.append('DMSC_USE_DLL')
+        else:
+            self.extensions[0].libraries.extend(['gmp', 'mpfr', 'mpc'])
+
         _prefix = '-' if compiler != 'msvc' else '/'
         for i in range(len(_comp_args)):
             _comp_args[i] = ''.join([_prefix, _comp_args[i]])
@@ -89,7 +87,6 @@ extensions = [
     Extension('gmpy2.gmpy2',
               sources=sources,
               include_dirs=['./src'],
-              libraries=['mpc','mpfr','gmp'],
               extra_compile_args=_comp_args,
               )
 ]
@@ -98,7 +95,7 @@ cmdclass = {'build_ext': Gmpy2Build}
 
 setup(
     name="gmpy2",
-    version="2.1.0b4",
+    version="2.1.0b5",
     author="Case Van Horsen",
     author_email="casevh@gmail.com",
     cmdclass=cmdclass,

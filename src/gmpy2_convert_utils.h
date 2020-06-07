@@ -8,7 +8,7 @@
  *           2008, 2009 Alex Martelli                                      *
  *                                                                         *
  * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019 Case Van Horsen                  *
+ *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -49,11 +49,7 @@ static unsigned PY_LONG_LONG GMPy_Integer_AsUnsignedLongLongAndError(PyObject *v
 
 /* Support conversion to/from mp_bitcnt_t and Py_ssize_t. */
 
-/* The following code assumes that the typedef in gmp.h for mingw64 based
- * builds has been changed to unsigned long long int.
- */
-
-#if defined _WIN64 && (MPIR || MSYS2)
+#if defined _WIN64 && MPIR
 # define mp_bitcnt_t_From_Integer c_ulonglong_From_Integer
 # define GMPy_Integer_AsMpBitCntAndError GMPy_Integer_AsUnsignedLongLongAndError
 #else
