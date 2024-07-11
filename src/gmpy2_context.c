@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_context.c                                                         *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -40,23 +38,20 @@
  *   GMPy_CTXT_Get
  *   GMPy_CTXT_Copy
  *   GMPy_CTXT_ieee
- *   GMPy_CTXT_Local
  *   GMPy_CTXT_Context
  *   GMPy_CTXT_Repr_Slot
  *   GMPy_CTXT_Enter
  *   GMPy_CTXT_Exit
  *   GMPy_CTXT_Clear_Flags
- *   GMPy_CTXT_Manager_New
- *   GMPy_CTXT_Manager_Dealloc
- *   GMPy_CTXT_Manager_Repr_Slot
- *   GMPy_CTXT_Manager_Enter
- *   GMPy_CTXT_Manager_Exit
  *     plus getters & setters....
  *
  * Internal functions
  * ==================
  *   GMPy_current_context
  */
+
+
+#include "pythoncapi_compat.h"
 
 /* Create and delete Context objects. */
 
@@ -84,11 +79,8 @@ GMPy_CTXT_New(void)
         result->ctx.imag_round = -1;
         result->ctx.allow_complex = 0;
         result->ctx.rational_division = 0;
-
-#ifndef WITHOUT_THREADS
-        result->tstate = NULL;
-#endif
-
+        result->ctx.allow_release_gil = 0;
+        result->token = NULL;
     }
     return (PyObject*)result;
 };
@@ -96,139 +88,113 @@ GMPy_CTXT_New(void)
 static void
 GMPy_CTXT_Dealloc(CTXT_Object *self)
 {
-    PyObject_Del(self);
+    PyObject_Free(self);
 };
 
-/* Support for global and thread local contexts. */
+/* Begin support for context vars. */
 
-/* Doc-string, alternate definitions below. */
+PyDoc_STRVAR(GMPy_doc_get_context,
+"get_context() -> context\n\n"
+"Return a reference to the current context.");
+
+static inline PyObject *
+GMPy_CTXT_Get(PyObject *self, PyObject *args)
+{
+    PyObject *tl_context;
+
+    if (PyContextVar_Get(current_context_var, NULL, &tl_context) < 0) {
+        return NULL;
+    }
+
+    if (tl_context != NULL) {
+        return tl_context;
+    }
+
+    /* Since there is no existing context, and no default value, let's
+     * just create a new one.
+     */
+
+    tl_context = GMPy_CTXT_New();
+
+    if (tl_context == NULL) {
+        return NULL;
+    }
+
+    PyObject *tok = PyContextVar_Set(current_context_var, tl_context);
+    if (tok == NULL) {
+        Py_DECREF(tl_context);
+        return NULL;
+    }
+    Py_DECREF(tok);
+
+    return tl_context;
+}
 
 PyDoc_STRVAR(GMPy_doc_set_context,
-"set_context(context)\n\n"
+"set_context(context, /) -> None\n\n"
 "Activate a context object controlling gmpy2 arithmetic.\n");
 
-#ifdef WITHOUT_THREADS
-
+/* Set the thread local context to a new context, decrement old reference */
 static PyObject *
-GMPy_CTXT_Set(PyObject *self, PyObject *other)
+GMPy_CTXT_Set(PyObject *self, PyObject *v)
 {
-    if (!CTXT_Check(other)) {
+    if (!CTXT_Check(v)) {
         VALUE_ERROR("set_context() requires a context argument");
         return NULL;
     }
 
-    Py_DECREF((PyObject*)module_context);
-    Py_INCREF((PyObject*)other);
-    module_context = (CTXT_Object*)other;
+    Py_INCREF(v);
+    PyObject *tok = PyContextVar_Set(current_context_var, v);
+    Py_DECREF(v);
+
+    if (tok == NULL) {
+        return NULL;
+    }
+
+    Py_DECREF(tok);
 
     Py_RETURN_NONE;
 }
 
-#else
-
-/* Begin support for thread local contexts. */
-
-/* Get the context from the thread state dictionary. */
-static CTXT_Object *
-current_context_from_dict(void)
-{
-    PyObject *dict;
-    PyObject *tl_context;
-    PyThreadState *tstate;
-
-    dict = PyThreadState_GetDict();
-    if (dict == NULL) {
-        RUNTIME_ERROR("cannot get thread state");
-        return NULL;
-    }
-
-#ifdef PY3
-    tl_context = PyDict_GetItemWithError(dict, tls_context_key);
-#else
-    tl_context = PyDict_GetItem(dict, tls_context_key);
-#endif
-    if (!tl_context) {
-#ifdef PY3
-        if (PyErr_Occurred()) {
-            return NULL;
-        }
-#endif
-
-        /* Set up a new thread local context. */
-        tl_context = GMPy_CTXT_New();
-        if (!tl_context) {
-            return NULL;
-        }
-
-        if (PyDict_SetItem(dict, tls_context_key, tl_context) < 0) {
-            Py_DECREF(tl_context);
-            return NULL;
-        }
-        Py_DECREF(tl_context);
-    }
-
-    /* Cache the context of the current thread, assuming that it
-     * will be accessed several times before a thread switch. */
-    tstate = PyThreadState_GET();
-    if (tstate) {
-        cached_context = (CTXT_Object*)tl_context;
-        cached_context->tstate = tstate;
-    }
-
-    /* Borrowed reference with refcount==1 */
-    return (CTXT_Object*)tl_context;
-}
-
-/* Return borrowed reference to thread local context. */
-static CTXT_Object *
-GMPy_current_context(void)
-{
-    PyThreadState *tstate = PyThreadState_GET();
-
-    if (cached_context && cached_context->tstate == tstate) {
-        return (CTXT_Object*)cached_context;
-    }
-
-    return current_context_from_dict();
-}
-
-/* Set the thread local context to a new context, decrement old reference */
+#if 1
 static PyObject *
-GMPy_CTXT_Set(PyObject *self, PyObject *other)
+GMPy_CTXT_Enter(PyObject *self, PyObject *args)
 {
-    PyObject *dict;
-    PyThreadState *tstate;
+    PyObject *tok = NULL;
+    PyObject *result = NULL;
 
-    if (!CTXT_Check(other)) {
-        VALUE_ERROR("set_context() requires a context argument");
+    result = GMPy_CTXT_Copy(self, NULL);
+    if (!result) {
         return NULL;
     }
 
-    dict = PyThreadState_GetDict();
-    if (dict == NULL) {
-        RUNTIME_ERROR("cannot get thread state");
+    Py_INCREF(result);
+    tok = PyContextVar_Set(current_context_var, result);
+    Py_DECREF(result);
+
+    if (tok == NULL) {
         return NULL;
     }
 
-    if (PyDict_SetItem(dict, tls_context_key, other) < 0) {
+    ((CTXT_Object*)self)->token = tok;
+
+    return result;
+}
+
+static PyObject *
+GMPy_CTXT_Exit(PyObject *self, PyObject *args)
+{
+    int res = PyContextVar_Reset(current_context_var, ((CTXT_Object*)self)->token);
+    if (res == -1) {
+        SYSTEM_ERROR("Unexpected failure in restoring context.");
         return NULL;
     }
-
-    /* Cache the context of the current thread, assuming that it
-     * will be accessed several times before a thread switch. */
-    cached_context = NULL;
-    tstate = PyThreadState_GET();
-    if (tstate) {
-        cached_context = (CTXT_Object*)other;
-        cached_context->tstate = tstate;
-    }
-
     Py_RETURN_NONE;
 }
 #endif
 
 PyDoc_STRVAR(GMPy_doc_context_ieee,
-"ieee(size[,subnormalize=True]) -> context\n\n"
+"ieee(size, /, subnormalize=True) -> context\n\n"
 "Return a new context corresponding to a standard IEEE floating point\n"
 "format. The supported sizes are 16, 32, 64, 128, and multiples of\n"
 "32 greater than 128.");
@@ -248,7 +214,7 @@ GMPy_CTXT_ieee(PyObject *self, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    bitwidth = PyIntOrLong_AsLong(PyTuple_GET_ITEM(args, 0));
+    bitwidth = PyLong_AsLong(PyTuple_GET_ITEM(args, 0));
     if (bitwidth == -1 && PyErr_Occurred()) {
         TYPE_ERROR("ieee() requires 'int' argument");
         return NULL;
@@ -312,38 +278,17 @@ GMPy_CTXT_ieee(PyObject *self, PyObject *args, PyObject *kwargs)
     return (PyObject*)result;
 }
 
-/* Create and delete ContextManager objects. */
-
-static PyObject *
-GMPy_CTXT_Manager_New(void)
-{
-    PyObject *result;
-
-    result = (PyObject*)PyObject_New(CTXT_Manager_Object, &CTXT_Manager_Type);
-    ((CTXT_Manager_Object*)(result))->new_context = NULL;
-    ((CTXT_Manager_Object*)(result))->old_context = NULL;
-    return result;
-}
-
-static void
-GMPy_CTXT_Manager_Dealloc(CTXT_Manager_Object *self)
-{
-    Py_XDECREF(self->new_context);
-    Py_XDECREF(self->old_context);
-    PyObject_Del(self);
-}
-
 /* Helper function to convert to convert a rounding mode to a string. */
 
 static PyObject *
 _round_to_name(int val)
 {
-    if (val == MPFR_RNDN) return Py2or3String_FromString("RoundToNearest");
-    if (val == MPFR_RNDZ) return Py2or3String_FromString("RoundToZero");
-    if (val == MPFR_RNDU) return Py2or3String_FromString("RoundUp");
-    if (val == MPFR_RNDD) return Py2or3String_FromString("RoundDown");
-    if (val == MPFR_RNDA) return Py2or3String_FromString("RoundAwayZero");
-    if (val == GMPY_DEFAULT) return Py2or3String_FromString("Default");
+    if (val == MPFR_RNDN) return PyUnicode_FromString("RoundToNearest");
+    if (val == MPFR_RNDZ) return PyUnicode_FromString("RoundToZero");
+    if (val == MPFR_RNDU) return PyUnicode_FromString("RoundUp");
+    if (val == MPFR_RNDD) return PyUnicode_FromString("RoundDown");
+    if (val == MPFR_RNDA) return PyUnicode_FromString("RoundAwayZero");
+    if (val == GMPY_DEFAULT) return PyUnicode_FromString("Default");
     return NULL;
 }
 
@@ -355,11 +300,11 @@ GMPy_CTXT_Repr_Slot(CTXT_Object *self)
     PyObject *result = NULL;
     int i = 0;
 
-    tuple = PyTuple_New(23);
+    tuple = PyTuple_New(24);
     if (!tuple)
         return NULL;
 
-    format = Py2or3String_FromString(
+    format = PyUnicode_FromString(
             "context(precision=%s, real_prec=%s, imag_prec=%s,\n"
             "        round=%s, real_round=%s, imag_round=%s,\n"
             "        emax=%s, emin=%s,\n"
@@ -371,27 +316,29 @@ GMPy_CTXT_Repr_Slot(CTXT_Object *self)
             "        trap_erange=%s, erange=%s,\n"
             "        trap_divzero=%s, divzero=%s,\n"
             "        allow_complex=%s,\n"
-            "        rational_division=%s)"
+            "        rational_division=%s,\n"
+            "        allow_release_gil=%s)"
             );
     if (!format) {
         Py_DECREF(tuple);
         return NULL;
     }
 
-    PyTuple_SET_ITEM(tuple, i++, PyIntOrLong_FromLong(self->ctx.mpfr_prec));
+    PyTuple_SET_ITEM(tuple, i++, PyLong_FromLong(self->ctx.mpfr_prec));
     if (self->ctx.real_prec == GMPY_DEFAULT)
-        PyTuple_SET_ITEM(tuple, i++, Py2or3String_FromString("Default"));
+        PyTuple_SET_ITEM(tuple, i++, PyUnicode_FromString("Default"));
     else
-        PyTuple_SET_ITEM(tuple, i++, PyIntOrLong_FromLong(self->ctx.real_prec));
+        PyTuple_SET_ITEM(tuple, i++, PyLong_FromLong(self->ctx.real_prec));
     if (self->ctx.imag_prec == GMPY_DEFAULT)
-        PyTuple_SET_ITEM(tuple, i++, Py2or3String_FromString("Default"));
+        PyTuple_SET_ITEM(tuple, i++, PyUnicode_FromString("Default"));
     else
-        PyTuple_SET_ITEM(tuple, i++, PyIntOrLong_FromLong(self->ctx.imag_prec));
+        PyTuple_SET_ITEM(tuple, i++, PyLong_FromLong(self->ctx.imag_prec));
+
     PyTuple_SET_ITEM(tuple, i++, _round_to_name(self->ctx.mpfr_round));
     PyTuple_SET_ITEM(tuple, i++, _round_to_name(self->ctx.real_round));
     PyTuple_SET_ITEM(tuple, i++, _round_to_name(self->ctx.imag_round));
-    PyTuple_SET_ITEM(tuple, i++, PyIntOrLong_FromLong(self->ctx.emax));
-    PyTuple_SET_ITEM(tuple, i++, PyIntOrLong_FromLong(self->ctx.emin));
+    PyTuple_SET_ITEM(tuple, i++, PyLong_FromLong(self->ctx.emax));
+    PyTuple_SET_ITEM(tuple, i++, PyLong_FromLong(self->ctx.emin));
     PyTuple_SET_ITEM(tuple, i++, PyBool_FromLong(self->ctx.subnormalize));
     PyTuple_SET_ITEM(tuple, i++, PyBool_FromLong(self->ctx.traps & TRAP_UNDERFLOW));
     PyTuple_SET_ITEM(tuple, i++, PyBool_FromLong(self->ctx.underflow));
@@ -407,9 +354,10 @@ GMPy_CTXT_Repr_Slot(CTXT_Object *self)
     PyTuple_SET_ITEM(tuple, i++, PyBool_FromLong(self->ctx.divzero));
     PyTuple_SET_ITEM(tuple, i++, PyBool_FromLong(self->ctx.allow_complex));
     PyTuple_SET_ITEM(tuple, i++, PyBool_FromLong(self->ctx.rational_division));
+    PyTuple_SET_ITEM(tuple, i++, PyBool_FromLong(self->ctx.allow_release_gil));
 
     if (!PyErr_Occurred())
-        result = Py2or3String_Format(format, tuple);
+        result = PyUnicode_Format(format, tuple);
     else
         SYSTEM_ERROR("internal error in GMPy_CTXT_Repr");
 
@@ -418,28 +366,8 @@ GMPy_CTXT_Repr_Slot(CTXT_Object *self)
     return result;
 }
 
-static PyObject *
-GMPy_CTXT_Manager_Repr_Slot(CTXT_Manager_Object *self)
-{
-    return Py_BuildValue("s", "<gmpy2.ContextManagerObject>");
-}
-
-PyDoc_STRVAR(GMPy_doc_get_context,
-"get_context() -> gmpy2 context\n\n"
-"Return a reference to the current context.");
-
-static PyObject *
-GMPy_CTXT_Get(PyObject *self, PyObject *args)
-{
-    CTXT_Object *context;
-
-    CURRENT_CONTEXT(context);
-    Py_XINCREF((PyObject*)context);
-    return (PyObject*)context;
-}
-
 PyDoc_STRVAR(GMPy_doc_context_copy,
-"context.copy() -> gmpy2 context\n\n"
+"context.copy() -> context\n\n"
 "Return a copy of a context.");
 
 static PyObject *
@@ -447,7 +375,10 @@ GMPy_CTXT_Copy(PyObject *self, PyObject *other)
 {
     CTXT_Object *result;
 
-    result = (CTXT_Object*)GMPy_CTXT_New();
+    if(!(result = (CTXT_Object*)GMPy_CTXT_New())) {
+        return NULL;
+    }
+
     result->ctx = ((CTXT_Object*)self)->ctx;
     return (PyObject*)result;
 }
@@ -468,7 +399,7 @@ _parse_context_args(CTXT_Object *ctxt, PyObject *kwargs)
         "real_round", "imag_round", "emax", "emin", "subnormalize",
         "trap_underflow", "trap_overflow", "trap_inexact",
         "trap_invalid", "trap_erange", "trap_divzero", "allow_complex",
-        "rational_division", NULL };
+        "rational_division", "allow_release_gil", NULL };
 
     /* Create an empty dummy tuple to use for args. */
 
@@ -487,7 +418,7 @@ _parse_context_args(CTXT_Object *ctxt, PyObject *kwargs)
     x_trap_divzero = ctxt->ctx.traps & TRAP_DIVZERO;
 
     if (!(PyArg_ParseTupleAndKeywords(args, kwargs,
-            "|llliiilliiiiiiiii", kwlist,
+            "|llliiilliiiiiiiiii", kwlist,
             &ctxt->ctx.mpfr_prec,
             &ctxt->ctx.real_prec,
             &ctxt->ctx.imag_prec,
@@ -504,7 +435,8 @@ _parse_context_args(CTXT_Object *ctxt, PyObject *kwargs)
             &x_trap_erange,
             &x_trap_divzero,
             &ctxt->ctx.allow_complex,
-            &ctxt->ctx.rational_division))) {
+            &ctxt->ctx.rational_division,
+            &ctxt->ctx.allow_release_gil))) {
         VALUE_ERROR("invalid keyword arguments for context");
         Py_DECREF(args);
         return 0;
@@ -600,214 +532,48 @@ _parse_context_args(CTXT_Object *ctxt, PyObject *kwargs)
 }
 
 PyDoc_STRVAR(GMPy_doc_local_context,
-"local_context([context[,keywords]]) -> context manager\n\n"
-"Create a context manager object that will restore the current context\n"
-"when the 'with ...' block terminates. The temporary context for the\n"
-"'with ...' block is based on the current context if no context is\n"
-"specified. Keyword arguments are supported and will modify the\n"
-"temporary new context.");
+"local_context(**kwargs) -> context\n"
+"local_context(context, /, **kwargs) -> context\n\n"
+"Return a new context for controlling gmpy2 arithmetic, based either\n"
+"on the current context or on a ctx value.  Context options additionally\n"
+"can be overriden by keyword arguments.");
 
 static PyObject *
 GMPy_CTXT_Local(PyObject *self, PyObject *args, PyObject *kwargs)
 {
-    CTXT_Manager_Object *result;
-    int arg_context = 0;
-    CTXT_Object *context, *temp;
+    CTXT_Object *result = NULL;
+    PyObject *temp = NULL;
 
-    CURRENT_CONTEXT(context);
-
-    if (PyTuple_GET_SIZE(args) == 1 && CTXT_Check(PyTuple_GET_ITEM(args, 0))) {
-        arg_context = 1;
-    }
-    else if (PyTuple_GET_SIZE(args)) {
-        VALUE_ERROR("local_context() only supports [context[,keyword]] arguments");
+    if (PyErr_WarnFormat(PyExc_DeprecationWarning, 1,
+                         "local_context() is deprecated, "
+                         "use context(get_context()) instead.")) {
         return NULL;
     }
 
-    if (!(result = (CTXT_Manager_Object*)GMPy_CTXT_Manager_New()))
-        return NULL;
-
-    if (arg_context) {
-        temp = (CTXT_Object*)PyTuple_GET_ITEM(args, 0);
-        result->new_context = temp;
-        Py_INCREF((PyObject*)(result->new_context));
+    if (PyTuple_GET_SIZE(args) == 0) {
+        if (!(temp = GMPy_CTXT_Get(NULL, NULL))) {
+            /* LCOV_EXCL_START */
+            return NULL;
+            /* LCOV_EXCL_STOP */
+        }
+        if (!(result = (CTXT_Object*)GMPy_CTXT_Copy(temp, NULL))) {
+            /* LCOV_EXCL_START */
+            return NULL;
+            /* LCOV_EXCL_STOP */
+        }
+        Py_DECREF(temp);
+    }
+    else if (PyTuple_GET_SIZE(args) == 1 && CTXT_Check(PyTuple_GET_ITEM(args, 0))) {
+        if (!(result = (CTXT_Object*)GMPy_CTXT_Copy(PyTuple_GET_ITEM(args, 0), NULL))) {
+            /* LCOV_EXCL_START */
+            return NULL;
+            /* LCOV_EXCL_STOP */
+        }
     }
     else {
-        result->new_context = context;
-        Py_INCREF((PyObject*)(result->new_context));
-    }
-
-    result->old_context = (CTXT_Object*)GMPy_CTXT_Copy((PyObject*)context, NULL);
-    if (!(result->old_context)) {
-        Py_DECREF((PyObject*)result);
+        VALUE_ERROR("local_context() only supports [[context][,keyword]] arguments");
         return NULL;
     }
-
-    if (!_parse_context_args(result->new_context, kwargs)) {
-        /* There was an error parsing the keyword arguments. */
-        Py_DECREF((PyObject*)result);
-        return NULL;
-    }
-    else {
-        /* Parsing was successful. */
-        return (PyObject*)result;
-    }
-}
-
-PyDoc_STRVAR(GMPy_doc_context,
-"context() -> context manager\n\n"
-"Return a new context for controlling MPFR and MPC arithmetic. To load\n"
-"the new context, use set_context(). Options can only be specified as\n"
-"keyword arguments. \n"
-"\nOptions\n"
-"    precision:         precision, in bits, of an MPFR result\n"
-"    real_prec:         precision, in bits, of Re(MPC)\n"
-"                         -1 implies use mpfr_prec\n"
-"    imag_prec:         precision, in bits, of Im(MPC)\n"
-"                         -1 implies use real_prec\n"
-"    round:             rounding mode for MPFR\n"
-"    real_round:        rounding mode for Re(MPC)\n"
-"                         -1 implies use mpfr_round\n"
-"    imag_round:        rounding mode for Im(MPC)\n"
-"                         -1 implies use real_round\n"
-"    e_max:             maximum allowed exponent\n"
-"    e_min:             minimum allowed exponent\n"
-"    subnormalize:      if True, subnormalized results can be returned\n"
-"    trap_underflow:    if True, raise exception for underflow\n"
-"                       if False, set underflow flag\n"
-"    trap_overflow:     if True, raise exception for overflow\n"
-"                       if False, set overflow flag and return Inf or -Inf\n"
-"    trap_inexact:      if True, raise exception for inexact result\n"
-"                       if False, set inexact flag\n"
-"    trap_invalid:      if True, raise exception for invalid operation\n"
-"                       if False, set invalid flag and return NaN\n"
-"    trap_erange:       if True, raise exception for range error\n"
-"                       if False, set erange flag\n"
-"    trap_divzero:      if True, raise exception for division by zero\n"
-"                       if False, set divzero flag and return Inf or -Inf\n"
-"    allow_complex:     if True, allow mpfr functions to return mpc\n"
-"                       if False, mpfr functions cannot return an mpc\n"
-"    rational_division: if True, mpz/mpz returns an mpq\n"
-"                       if False, mpz/mpz follows default behavior\n");
-#if 0
-"\nMethods\n"
-"    abs(x)          return absolute value of x\n"
-"    acos(x)         return inverse cosine of x\n"
-"    acosh(x)        return inverse hyperbolic cosine of x\n"
-"    add(x,y)        return x + y\n"
-"    agm(x,y)        return arthimetic-geometric mean of x and y\n"
-"    ai(x)           return the Airy function of x\n"
-"    asin(x)         return inverse sine of x\n"
-"    asinh(x)        return inverse hyperbolic sine of x\n"
-"    atan(x)         return inverse tangent of x\n"
-"    atan2(y,x)      return inverse tangent of (y / x)\n"
-"    atanh(x)        return inverse hyperbolic tangent of x\n"
-"    cbrt(x)         return cube root of x\n"
-"    ceil(x)         return ceiling of x\n"
-"    check_range(x)  return value with exponents within current range\n"
-"    clear_flags()   clear all exception flags\n"
-"    const_catalan() return Catalan constant (0.91596559...)\n"
-"    const_euler()   return Euler contstant (0.57721566...)\n"
-"    const_log()     return natural log of 2 (0.69314718...)\n"
-"    const_pi()      return Pi (3.14159265...)\n"
-"    copy()          return a copy of the context\n"
-"    cos(x)          return cosine of x\n"
-"    cosh(x)         return hyperbolic cosine of x\n"
-"    cot(x)          return cotangent of x\n"
-"    coth(x)         return hyperbolic cotangent of x\n"
-"    csc(x)          return cosecant of x\n"
-"    csch(x)         return hyperbolic cosecant of x\n"
-"    degrees(x)      convert value in radians to degrees\n"
-"    digamma(x)      return the digamma of x\n"
-"    div(x,y)        return x / y\n"
-"    divmod(x,y)     return integer quotient and remainder\n"
-"    div_2exp(x,n)   return x / 2**n)\n"
-"    eint(x)         return exponential integral of x\n"
-"    erf(x)          return error function of x\n"
-"    erfc(x)         return complementary error function of x\n"
-"    exp(x)          return e**x\n"
-"    exp10(x)        return 10**x\n"
-"    exp2(x)         return 2**x\n"
-"    expm1(x)        return e**x - 1\n"
-"    factorial(n)    return floating-point approximation to n!\n"
-"    floor(x)        return floor of x\n"
-"    fma(x,y,z)      return correctly rounded (x * y) + z\n"
-"    fmod(x,y)       return x - int(x / y) * y, rounding to 0\n"
-"    fms(x,y,z)      return correctly rounded (x * y) - z\n"
-"    fsum(i)         return accurate sum of iterable i\n"
-"    gamma(x)        return gamma of x\n"
-"    hypot(y,x)      return square root of (x**2 + y**2)\n"
-"    is_finite(x)    return True if x is finite\n"
-"    is_infinite(x)\n"
-"    is_nan(x)\n"
-"    is_zero(x)\n"
-"    j0(x)           return Bessel of first kind of order 0 of x\n"
-"    j1(x)           return Bessel of first kind of order 1 of x\n"
-"    jn(x,n)         return Bessel of first kind of order n of x\n"
-"    lgamma(x)       return tuple (log(abs(gamma(x)), sign(gamma(x)))\n"
-"    li2(x)          return real part of dilogarithm of x\n"
-"    lngamma(x)      return logarithm of gamma of x\n"
-"    log(x)          return natural logarithm of x\n"
-"    log10(x)        return base-10 logarithm of x\n"
-"    log2(x)         return base-2 logarithm of x\n"
-"    max2(x,y)       return maximum of x and y, rounded to context\n"
-"    mpc(...)        create a new instance of an mpc\n"
-"    mpfr(...)       create a new instance of an mpfr\n"
-"    minus(x)        return -x\n"
-"    min2(x,y)       return minimum of x and y, rounded to context\n"
-"    mul(x,y)        return x * y\n"
-"    mul_2exp(x,n)   return x * 2**n\n"
-"    next_above(x)   return next mpfr towards +Infinity\n"
-"    next_below(x)   return next mpfr towards -Infinity\n"
-"    plus(x)         return +x\n"
-"    pow(x,y)        return x ** y\n"
-"    radians(x)      convert value in degrees to radians\n"
-"    rec_sqrt(x)     return 1 / sqrt(x)\n"
-"    rel_diff(x,y)   return abs(x - y) / x\n"
-"    remainder(x,y)  return x - int(x / y) * y, rounding to even\n"
-"    remquo(x,y)     return tuple of remainder(x,y) and low bits of\n"
-"                    the quotient\n"
-"    rint(x)         return x rounded to integer with current rounding\n"
-"    rint_ceil(x)    ...\n"
-"    rint_floor(x)   ...\n"
-"    rint_round(x)   ...\n"
-"    rint_trunc(x)   ...\n"
-"    root(x,n)       return the n-th of x\n"
-#ifdef MPC_110
-"    root_of_unity() return the k-th power of the n-th root of mpc(1)\n"
-#endif
-"    round2(x,n)     return x rounded to n bits.\n"
-"    round_away(x)   return x rounded to integer, ties away from 0\n"
-"    sec(x)          return secant of x\n"
-"    sech(x)         return hyperbolic secant of x\n"
-"    sin(x)          return sine of x\n"
-"    sin_cos(x)      return tuple (sin(x), cos(x))\n"
-"    sinh(x)         return hyperbolic sine of x\n"
-"    sinh_cosh(x)    return tuple (sinh(x), cosh(x))\n"
-"    sqrt(x)         return square root of x\n"
-"    square(x)       return x * x\n"
-"    sub(x)          return x - y\n"
-"    tan(x)          return tangent of x\n"
-"    tanh(x)         return hyperbolic tangent of x\n"
-"    trunc(x)        return x rounded towards 0\n"
-"    y0(x)           return Bessel of second kind of order 0 of x\n"
-"    y1(x)           return Bessel of second kind of order 1 of x\n"
-"    yn(x,n)         return Bessel of second kind of order n of x\n"
-"    zeta(x)         return Riemann zeta of x"
-#endif
-
-static PyObject *
-GMPy_CTXT_Context(PyObject *self, PyObject *args, PyObject *kwargs)
-{
-    CTXT_Object *result;
-
-    if (PyTuple_GET_SIZE(args)) {
-        VALUE_ERROR("context() only supports keyword arguments");
-        return NULL;
-    }
-
-    if (!(result = (CTXT_Object*)GMPy_CTXT_New()))
-        return NULL;
 
     if (!_parse_context_args(result, kwargs)) {
         /* There was an error parsing the keyword arguments. */
@@ -820,66 +586,51 @@ GMPy_CTXT_Context(PyObject *self, PyObject *args, PyObject *kwargs)
     }
 }
 
-static PyObject *
-GMPy_CTXT_Manager_Enter(PyObject *self, PyObject *args)
-{
-    PyObject *temp;
-
-    temp = GMPy_CTXT_Set(NULL, (PyObject*)((CTXT_Manager_Object*)self)->new_context);
-    if (!temp)
-        return NULL;
-    Py_DECREF(temp);
-
-    Py_INCREF((PyObject*)(((CTXT_Manager_Object*)self)->new_context));
-    return (PyObject*)(((CTXT_Manager_Object*)self)->new_context);
-}
+PyDoc_STRVAR(GMPy_doc_context,
+"context(**kwargs)\n"
+"context(ctx, /, **kwargs)\n\n"
+"Return a new context for controlling gmpy2 arithmetic, based either\n"
+"on the default context or on a given by ctx value.  Context options\n"
+"additionally can be overriden by keyword arguments.");
 
 static PyObject *
-GMPy_CTXT_Manager_Exit(PyObject *self, PyObject *args)
+GMPy_CTXT_Context(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
-    PyObject *temp;
+    CTXT_Object *result = NULL;
 
-    temp = GMPy_CTXT_Set(NULL, (PyObject*)((CTXT_Manager_Object*)self)->old_context);
-    if (!temp)
+
+    if (PyTuple_GET_SIZE(args) == 0) {
+        if (!(result = (CTXT_Object*)GMPy_CTXT_New())) {
+            /* LCOV_EXCL_START */
+            return NULL;
+            /* LCOV_EXCL_STOP */
+        }
+    }
+    else if (PyTuple_GET_SIZE(args) == 1 && CTXT_Check(PyTuple_GET_ITEM(args, 0))) {
+        if (!(result = (CTXT_Object*)GMPy_CTXT_Copy(PyTuple_GET_ITEM(args, 0), NULL))) {
+            /* LCOV_EXCL_START */
+            return NULL;
+            /* LCOV_EXCL_STOP */
+        }
+    }
+    else {
+        VALUE_ERROR("context() only supports [[context][,keyword]] arguments");
         return NULL;
-    Py_DECREF(temp);
+    }
 
-    Py_RETURN_NONE;
-}
-
-static PyObject *
-GMPy_CTXT_Enter(PyObject *self, PyObject *args)
-{
-    PyObject *temp;
-    PyObject *result;
-
-    result = GMPy_CTXT_Copy(self, NULL);
-    if (!result)
+    if (!_parse_context_args(result, kwargs)) {
+        /* There was an error parsing the keyword arguments. */
+        Py_DECREF((PyObject*)result);
         return NULL;
-
-    temp = GMPy_CTXT_Set(NULL, result);
-    if (!temp)
-        return NULL;
-    Py_DECREF(temp);
-
-    return result;
-}
-
-static PyObject *
-GMPy_CTXT_Exit(PyObject *self, PyObject *args)
-{
-    PyObject *temp;
-
-    temp = GMPy_CTXT_Set(NULL, self);
-    if (!temp)
-        return NULL;
-    Py_DECREF(temp);
-
-    Py_RETURN_NONE;
+    }
+    else {
+        /* Parsing was successful. */
+        return (PyObject*)result;
+    }
 }
 
 PyDoc_STRVAR(GMPy_doc_context_clear_flags,
-"clear_flags()\n\n"
+"clear_flags() -> None\n\n"
 "Clear all MPFR exception flags.");
 
 static PyObject *
@@ -909,7 +660,7 @@ GMPy_CTXT_Set_##NAME(CTXT_Object *self, PyObject *value, void *closure) \
         TYPE_ERROR(#NAME " must be True or False"); \
         return -1; \
     } \
-    self->ctx.NAME = (value == Py_True) ? 1 : 0; \
+    self->ctx.NAME = Py_IsTrue(value) ? 1 : 0; \
     return 0; \
 }
 
@@ -930,7 +681,7 @@ GMPy_CTXT_Set_##NAME(CTXT_Object *self, PyObject *value, void *closure) \
         TYPE_ERROR(#NAME " must be True or False"); \
         return -1; \
     } \
-    if (value == Py_True) \
+    if (Py_IsTrue(value)) \
         self->ctx.traps |= TRAP; \
     else \
         self->ctx.traps &= ~(TRAP); \
@@ -952,11 +703,97 @@ GETSET_BOOLEAN_BIT(trap_erange, TRAP_ERANGE);
 GETSET_BOOLEAN_BIT(trap_divzero, TRAP_DIVZERO);
 GETSET_BOOLEAN(allow_complex)
 GETSET_BOOLEAN(rational_division)
+GETSET_BOOLEAN(allow_release_gil)
+
+PyDoc_STRVAR(GMPy_doc_CTXT_subnormalize,
+"The usual IEEE-754 floating point representation supports gradual\n"
+"underflow when the minimum exponent is reached.  The MFPR library\n"
+"does not enable gradual underflow by default but it can be enabled\n"
+"to precisely mimic the results of IEEE-754 floating point operations.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_trap_underflow,
+"If set to `False`, a result that is smaller than the smallest possible\n"
+"`mpfr` given the current exponent range will be replaced by +/-0.0.\n"
+"If set to `True`, an `UnderflowResultError` exception is raised.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_underflow,
+"This flag is not user controllable. It is automatically set if a\n"
+"result underflowed to +/-0.0 and `trap_underflow` is `False`.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_trap_overflow,
+"If set to `False`, a result that is larger than the largest possible\n"
+"`mpfr` given the current exponent range will be replaced by +/-Infinity.\n"
+"If set to `True`, an `OverflowResultError` exception is raised.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_overflow,
+"This flag is not user controllable.  It is automatically set if a\n"
+"result overflowed to +/-Infinity and `trap_overflow` is `False`.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_trap_inexact,
+"This attribute controls whether or not an `InexactResultError` exception\n"
+"is raised if an inexact result is returned.  To check if the result is\n"
+"greater or less than the exact result, check the rc attribute of\n"
+"the `mpfr` result.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_inexact,
+"This flag is not user controllable. It is automatically set\n"
+"if an inexact result is returned.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_trap_invalid,
+"This attribute controls whether or not an `InvalidOperationError`\n"
+"exception is raised if a numerical result is not defined.  A\n"
+"special NaN (Not-A-Number) value will be returned if an exception\n"
+"is not raised. The `InvalidOperationError` is a sub-class of\n"
+"Python’s `ValueError`.\n\nFor example, gmpy2.sqrt(-2) will normally\n"
+"return mpfr(‘nan’). However, if `allow_complex` is set to `True`,\n"
+"then an `mpc` result will be returned.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_invalid,
+"This flag is not user controllable.  It is automatically set if an\n"
+"invalid (Not-A-Number) result is returned.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_trap_erange,
+"This attribute controls whether or not a `RangeError` exception is\n"
+"raised when certain operations are performed on NaN and/or Infinity\n"
+"values.  Setting `trap_erange` to `True` can be used to raise an exception\n"
+"if comparisons are attempted with a NaN.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_erange,
+"This flag is not user controllable.  It is automatically\n"
+"set if an erange error occurred.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_trap_divzero,
+"This attribute controls whether or not a `DivisionByZeroError` exception\n"
+"is raised if division by 0 occurs.  The `DivisionByZeroError` is a\n"
+"sub-class of Python’s `ZeroDivisionError`.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_divzero,
+"This flag is not user controllable.  It is automatically set if a\n"
+"division by zero occurred and NaN result was returned.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_allow_complex,
+"This attribute controls whether or not an `mpc` result can be returned\n"
+"if an `mpfr` result would normally not be possible.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_rational_division,
+"If set to `True`, `mpz` / `mpz` will return an `mpq` instead of an `mpfr`.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_allow_release_gil,
+"If set to `True`, many `mpz` and `mpq` computations will release the GIL.\n\n"
+"This is considered an experimental feature.");
+
+PyDoc_STRVAR(GMPy_doc_CTXT_precision,
+"This attribute controls the precision of an `mpfr` result.  The\n"
+"precision is specified in bits, not decimal digits.  The maximum\n"
+"precision that can be specified is platform dependent and can be\n"
+"retrieved with `get_max_precision()`.\n\n"
+"Note: Specifying a value for precision that is too close to the\n"
+"maximum precision will cause the MPFR library to fail.");
 
 static PyObject *
 GMPy_CTXT_Get_precision(CTXT_Object *self, void *closure)
 {
-    return PyIntOrLong_FromSsize_t((Py_ssize_t)(self->ctx.mpfr_prec));
+    return PyLong_FromSsize_t((Py_ssize_t)(self->ctx.mpfr_prec));
 }
 
 static int
@@ -964,11 +801,11 @@ GMPy_CTXT_Set_precision(CTXT_Object *self, PyObject *value, void *closure)
 {
     Py_ssize_t temp;
 
-    if (!(PyIntOrLong_Check(value))) {
+    if (!(PyLong_Check(value))) {
         TYPE_ERROR("precision must be Python integer");
         return -1;
     }
-    temp = PyIntOrLong_AsSsize_t(value);
+    temp = PyLong_AsSsize_t(value);
     /* A return value of -1 indicates an error has occurred. Since -1 is not
      * a legal value, we don't specifically check for an error condition.
      */
@@ -980,10 +817,15 @@ GMPy_CTXT_Set_precision(CTXT_Object *self, PyObject *value, void *closure)
     return 0;
 }
 
+PyDoc_STRVAR(GMPy_doc_CTXT_real_prec,
+"This attribute controls the precision of the real part of an `mpc`\n"
+"result.  If the value is Default, then the value of the `precision`\n"
+"attribute is used.");
+
 static PyObject *
 GMPy_CTXT_Get_real_prec(CTXT_Object *self, void *closure)
 {
-    return PyIntOrLong_FromSsize_t((Py_ssize_t)(GET_REAL_PREC(self)));
+    return PyLong_FromSsize_t((Py_ssize_t)(GET_REAL_PREC(self)));
 }
 
 static int
@@ -991,11 +833,11 @@ GMPy_CTXT_Set_real_prec(CTXT_Object *self, PyObject *value, void *closure)
 {
     Py_ssize_t temp;
 
-    if (!(PyIntOrLong_Check(value))) {
+    if (!(PyLong_Check(value))) {
         TYPE_ERROR("real_prec must be Python integer");
         return -1;
     }
-    temp = PyIntOrLong_AsSsize_t(value);
+    temp = PyLong_AsSsize_t(value);
     /* A return value of -1 indicates an error has occurred. Since -1 is not
      * a legal value, we don't specifically check for an error condition.
      */
@@ -1007,10 +849,14 @@ GMPy_CTXT_Set_real_prec(CTXT_Object *self, PyObject *value, void *closure)
     return 0;
 }
 
+PyDoc_STRVAR(GMPy_doc_CTXT_imag_prec,
+"This attribute controls the precision of the imaginary part of an `mpc`\n"
+"result.  If the value is Default, then the value of `real_prec` is used.");
+
 static PyObject *
 GMPy_CTXT_Get_imag_prec(CTXT_Object *self, void *closure)
 {
-    return PyIntOrLong_FromSsize_t((Py_ssize_t)(GET_IMAG_PREC(self)));
+    return PyLong_FromSsize_t((Py_ssize_t)(GET_IMAG_PREC(self)));
 }
 
 static int
@@ -1018,11 +864,11 @@ GMPy_CTXT_Set_imag_prec(CTXT_Object *self, PyObject *value, void *closure)
 {
     Py_ssize_t temp;
 
-    if (!(PyIntOrLong_Check(value))) {
+    if (!(PyLong_Check(value))) {
         TYPE_ERROR("imag_prec must be Python integer");
         return -1;
     }
-    temp = PyIntOrLong_AsSsize_t(value);
+    temp = PyLong_AsSsize_t(value);
     /* A return value of -1 indicates an error has occurred. Since -1 is not
      * a legal value, we don't specifically check for an error condition.
      */
@@ -1034,10 +880,18 @@ GMPy_CTXT_Set_imag_prec(CTXT_Object *self, PyObject *value, void *closure)
     return 0;
 }
 
+PyDoc_STRVAR(GMPy_doc_CTXT_round,
+"There are five rounding modes available to `mpfr` type:\n\n"
+" * RoundAwayZero - The result is rounded away from 0.0.\n"
+" * RoundDown - The result is rounded towards -Infinity.\n"
+" * RoundToNearest - Round to the nearest value; ties are rounded to an even value.\n"
+" * RoundToZero - The result is rounded towards 0.0.\n"
+" * RoundUp - The result is rounded towards +Infinity.");
+
 static PyObject *
 GMPy_CTXT_Get_round(CTXT_Object *self, void *closure)
 {
-    return PyIntOrLong_FromLong((long)(self->ctx.mpfr_round));
+    return PyLong_FromLong((long)(self->ctx.mpfr_round));
 }
 
 static int
@@ -1045,11 +899,11 @@ GMPy_CTXT_Set_round(CTXT_Object *self, PyObject *value, void *closure)
 {
     long temp;
 
-    if (!(PyIntOrLong_Check(value))) {
+    if (!(PyLong_Check(value))) {
         TYPE_ERROR("round mode must be Python integer");
         return -1;
     }
-    temp = PyIntOrLong_AsLong(value);
+    temp = PyLong_AsLong(value);
     if (temp == -1 && PyErr_Occurred()) {
         VALUE_ERROR("invalid value for round mode");
         return -1;
@@ -1076,10 +930,15 @@ GMPy_CTXT_Set_round(CTXT_Object *self, PyObject *value, void *closure)
     return 0;
 }
 
+PyDoc_STRVAR(GMPy_doc_CTXT_real_round,
+"This attribute controls the rounding mode for the real part of an\n"
+"`mpc` result.  If the value is Default, then the value of the round\n"
+"attribute is used.  Note: RoundAwayZero is not a valid rounding mode for `mpc`.");
+
 static PyObject *
 GMPy_CTXT_Get_real_round(CTXT_Object *self, void *closure)
 {
-    return PyIntOrLong_FromLong((long)GET_REAL_ROUND(self));
+    return PyLong_FromLong((long)GET_REAL_ROUND(self));
 }
 
 static int
@@ -1087,11 +946,11 @@ GMPy_CTXT_Set_real_round(CTXT_Object *self, PyObject *value, void *closure)
 {
     long temp;
 
-    if (!(PyIntOrLong_Check(value))) {
+    if (!(PyLong_Check(value))) {
         TYPE_ERROR("round mode must be Python integer");
         return -1;
     }
-    temp = PyIntOrLong_AsLong(value);
+    temp = PyLong_AsLong(value);
     if (temp == -1 && PyErr_Occurred()) {
         VALUE_ERROR("invalid value for round mode");
         return -1;
@@ -1107,10 +966,15 @@ GMPy_CTXT_Set_real_round(CTXT_Object *self, PyObject *value, void *closure)
     return 0;
 }
 
+PyDoc_STRVAR(GMPy_doc_CTXT_imag_round,
+"This attribute controls the rounding mode for the imaginary part of an\n"
+"`mpc` result. If the value is Default, then the value of the `real_round`\n"
+"attribute is used. Note: RoundAwayZero is not a valid rounding mode for `mpc`.");
+
 static PyObject *
 GMPy_CTXT_Get_imag_round(CTXT_Object *self, void *closure)
 {
-    return PyIntOrLong_FromLong((long)GET_IMAG_ROUND(self));
+    return PyLong_FromLong((long)GET_IMAG_ROUND(self));
 }
 
 static int
@@ -1118,11 +982,11 @@ GMPy_CTXT_Set_imag_round(CTXT_Object *self, PyObject *value, void *closure)
 {
     long temp;
 
-    if (!(PyIntOrLong_Check(value))) {
+    if (!(PyLong_Check(value))) {
         TYPE_ERROR("round mode must be Python integer");
         return -1;
     }
-    temp = PyIntOrLong_AsLong(value);
+    temp = PyLong_AsLong(value);
     if (temp == -1 && PyErr_Occurred()) {
         VALUE_ERROR("invalid value for round mode");
         return -1;
@@ -1138,10 +1002,15 @@ GMPy_CTXT_Set_imag_round(CTXT_Object *self, PyObject *value, void *closure)
     return 0;
 }
 
+PyDoc_STRVAR(GMPy_doc_CTXT_emin,
+"This attribute controls the minimum allowed exponent of an `mpfr`\n"
+"result.  The minimum exponent is platform dependent and can be\n"
+"retrieved with `get_emin_min()`.");
+
 static PyObject *
 GMPy_CTXT_Get_emin(CTXT_Object *self, void *closure)
 {
-    return PyIntOrLong_FromLong(self->ctx.emin);
+    return PyLong_FromLong(self->ctx.emin);
 }
 
 static int
@@ -1149,11 +1018,11 @@ GMPy_CTXT_Set_emin(CTXT_Object *self, PyObject *value, void *closure)
 {
     long exp;
 
-    if (!(PyIntOrLong_Check(value))) {
+    if (!(PyLong_Check(value))) {
         TYPE_ERROR("emin must be Python integer");
         return -1;
     }
-    exp = PyIntOrLong_AsLong(value);
+    exp = PyLong_AsLong(value);
     if (exp == -1 && PyErr_Occurred()) {
         VALUE_ERROR("requested minimum exponent is invalid");
         return -1;
@@ -1166,10 +1035,15 @@ GMPy_CTXT_Set_emin(CTXT_Object *self, PyObject *value, void *closure)
     return 0;
 }
 
+PyDoc_STRVAR(GMPy_doc_CTXT_emax,
+"This attribute controls the maximum allowed exponent of an `mpfr`\n"
+"result.  The maximum exponent is platform dependent and can be\n"
+"retrieved with `get_emax_max()`.");
+
 static PyObject *
 GMPy_CTXT_Get_emax(CTXT_Object *self, void *closure)
 {
-    return PyIntOrLong_FromLong(self->ctx.emax);
+    return PyLong_FromLong(self->ctx.emax);
 }
 
 static int
@@ -1177,11 +1051,11 @@ GMPy_CTXT_Set_emax(CTXT_Object *self, PyObject *value, void *closure)
 {
     long exp;
 
-    if (!(PyIntOrLong_Check(value))) {
+    if (!(PyLong_Check(value))) {
         TYPE_ERROR("emax must be Python integer");
         return -1;
     }
-    exp = PyIntOrLong_AsLong(value);
+    exp = PyLong_AsLong(value);
     if (exp == -1 && PyErr_Occurred()) {
         VALUE_ERROR("requested maximum exponent is invalid");
         return -1;
@@ -1197,7 +1071,7 @@ GMPy_CTXT_Set_emax(CTXT_Object *self, PyObject *value, void *closure)
 #define ADD_GETSET(NAME) \
     {#NAME, \
         (getter)GMPy_CTXT_Get_##NAME, \
-        (setter)GMPy_CTXT_Set_##NAME, NULL, NULL}
+        (setter)GMPy_CTXT_Set_##NAME, GMPy_doc_CTXT_##NAME, NULL}
 
 static PyGetSetDef GMPyContext_getseters[] = {
     ADD_GETSET(precision),
@@ -1223,6 +1097,7 @@ static PyGetSetDef GMPyContext_getseters[] = {
     ADD_GETSET(trap_divzero),
     ADD_GETSET(allow_complex),
     ADD_GETSET(rational_division),
+    ADD_GETSET(allow_release_gil),
     {NULL}
 };
 
@@ -1280,6 +1155,7 @@ static PyMethodDef GMPyContext_methods[] =
     { "frexp", GMPy_Context_Frexp, METH_O, GMPy_doc_context_frexp },
     { "fsum", GMPy_Context_Fsum, METH_O, GMPy_doc_context_fsum },
     { "gamma", GMPy_Context_Gamma, METH_O, GMPy_doc_context_gamma },
+    { "gamma_inc", GMPy_Context_Gamma_Inc, METH_VARARGS, GMPy_doc_context_gamma_inc },
     { "hypot", GMPy_Context_Hypot, METH_VARARGS, GMPy_doc_context_hypot },
     { "is_finite", GMPy_Context_Is_Finite, METH_O, GMPy_doc_context_is_finite },
     { "is_infinite", GMPy_Context_Is_Infinite, METH_O, GMPy_doc_context_is_infinite },
@@ -1327,9 +1203,7 @@ static PyMethodDef GMPyContext_methods[] =
     { "rint_trunc", GMPy_Context_RintTrunc, METH_O, GMPy_doc_context_rint_trunc },
     { "root", GMPy_Context_Root, METH_VARARGS, GMPy_doc_context_root },
     { "rootn", GMPy_Context_Rootn, METH_VARARGS, GMPy_doc_context_rootn },
-#ifdef MPC_110
     { "root_of_unity", GMPy_Context_Root_Of_Unity, METH_VARARGS, GMPy_doc_context_root_of_unity },
-#endif
     { "round2", GMPy_Context_Round2, METH_VARARGS, GMPy_doc_context_round2 },
     { "round_away", GMPy_Context_RoundAway, METH_O, GMPy_doc_context_round_away },
     { "sec", GMPy_Context_Sec, METH_O, GMPy_doc_context_sec },
@@ -1352,92 +1226,21 @@ static PyMethodDef GMPyContext_methods[] =
     { "y0", GMPy_Context_Y0, METH_O, GMPy_doc_context_y0 },
     { "y1", GMPy_Context_Y1, METH_O, GMPy_doc_context_y1 },
     { "zeta", GMPy_Context_Zeta, METH_O, GMPy_doc_context_zeta },
-    { "__enter__", GMPy_CTXT_Enter, METH_NOARGS, NULL },
+    { "__enter__", GMPy_CTXT_Enter, METH_VARARGS, NULL },
     { "__exit__", GMPy_CTXT_Exit, METH_VARARGS, NULL },
     { NULL, NULL, 1 }
 };
 
 static PyTypeObject CTXT_Type =
 {
-#ifdef PY3
-    PyVarObject_HEAD_INIT(0, 0)
-#else
-    PyObject_HEAD_INIT(0)
-        0,                                  /* ob_size          */
-#endif
-    "gmpy2 context",                        /* tp_name          */
-    sizeof(CTXT_Object),                    /* tp_basicsize     */
-        0,                                  /* tp_itemsize      */
-    (destructor) GMPy_CTXT_Dealloc,         /* tp_dealloc       */
-        0,                                  /* tp_print         */
-        0,                                  /* tp_getattr       */
-        0,                                  /* tp_setattr       */
-        0,                                  /* tp_reserved      */
-    (reprfunc) GMPy_CTXT_Repr_Slot,         /* tp_repr          */
-        0,                                  /* tp_as_number     */
-        0,                                  /* tp_as_sequence   */
-        0,                                  /* tp_as_mapping    */
-        0,                                  /* tp_hash          */
-        0,                                  /* tp_call          */
-        0,                                  /* tp_str           */
-        0,                                  /* tp_getattro      */
-        0,                                  /* tp_setattro      */
-        0,                                  /* tp_as_buffer     */
-    Py_TPFLAGS_DEFAULT,                     /* tp_flags         */
-    "GMPY2 Context Object",                 /* tp_doc           */
-        0,                                  /* tp_traverse      */
-        0,                                  /* tp_clear         */
-        0,                                  /* tp_richcompare   */
-        0,                                  /* tp_weaklistoffset*/
-        0,                                  /* tp_iter          */
-        0,                                  /* tp_iternext      */
-    GMPyContext_methods,                    /* tp_methods       */
-        0,                                  /* tp_members       */
-    GMPyContext_getseters,                  /* tp_getset        */
-};
-
-static PyMethodDef GMPyContextManager_methods[] =
-{
-    { "__enter__", GMPy_CTXT_Manager_Enter, METH_NOARGS, NULL },
-    { "__exit__", GMPy_CTXT_Manager_Exit, METH_VARARGS, NULL },
-    { NULL, NULL, 1 }
-};
-
-static PyTypeObject CTXT_Manager_Type =
-{
-#ifdef PY3
-    PyVarObject_HEAD_INIT(0, 0)
-#else
-    PyObject_HEAD_INIT(0)
-        0,                                   /* ob_size          */
-#endif
-    "gmpy2 context",                         /* tp_name          */
-    sizeof(CTXT_Manager_Object),             /* tp_basicsize     */
-        0,                                   /* tp_itemsize      */
-    (destructor) GMPy_CTXT_Manager_Dealloc,  /* tp_dealloc       */
-        0,                                   /* tp_print         */
-        0,                                   /* tp_getattr       */
-        0,                                   /* tp_setattr       */
-        0,                                   /* tp_reserved      */
-    (reprfunc) GMPy_CTXT_Manager_Repr_Slot,  /* tp_repr          */
-        0,                                   /* tp_as_number     */
-        0,                                   /* tp_as_sequence   */
-        0,                                   /* tp_as_mapping    */
-        0,                                   /* tp_hash          */
-        0,                                   /* tp_call          */
-        0,                                   /* tp_str           */
-        0,                                   /* tp_getattro      */
-        0,                                   /* tp_setattro      */
-        0,                                   /* tp_as_buffer     */
-    Py_TPFLAGS_DEFAULT,                      /* tp_flags         */
-    "GMPY2 Context manager",                 /* tp_doc           */
-        0,                                   /* tp_traverse      */
-        0,                                   /* tp_clear         */
-        0,                                   /* tp_richcompare   */
-        0,                                   /* tp_weaklistoffset*/
-        0,                                   /* tp_iter          */
-        0,                                   /* tp_iternext      */
-    GMPyContextManager_methods,              /* tp_methods       */
-        0,                                   /* tp_members       */
-        0,                                   /* tp_getset        */
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "gmpy2.context",
+    .tp_basicsize = sizeof(CTXT_Object),
+    .tp_dealloc = (destructor) GMPy_CTXT_Dealloc,
+    .tp_repr = (reprfunc) GMPy_CTXT_Repr_Slot,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_doc = GMPy_doc_context,
+    .tp_methods = GMPyContext_methods,
+    .tp_getset = GMPyContext_getseters,
+    .tp_new = GMPy_CTXT_Context,
 };

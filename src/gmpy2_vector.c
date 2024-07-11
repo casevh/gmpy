@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_vector.c                                                          *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -33,11 +31,11 @@
  */
 
 PyDoc_STRVAR(GMPy_doc_function_vector,
-"vector(iterable) -> list\n\n"
+"vector(iterable, /) -> list\n\n"
 "Template for applying a function to an iterable.");
 
 PyDoc_STRVAR(GMPy_doc_context_vector,
-"vector(iterable) -> list\n\n"
+"vector(iterable, /) -> list\n\n"
 "Template for applying a function to an iterable.");
 
 static PyObject *
@@ -93,11 +91,11 @@ GMPy_Context_Vector(PyObject *self, PyObject *other)
 }
 
 PyDoc_STRVAR(GMPy_doc_function_vector2,
-"vector2(iterable, iterable) -> list\n\n"
+"vector2(iterable, iterable, /) -> list\n\n"
 "Template for applying a function to a pair of iterables.");
 
 PyDoc_STRVAR(GMPy_doc_context_vector2,
-"vector2(iterable) -> list\n\n"
+"vector2(iterable, /) -> list\n\n"
 "Template for applying a function to a pair of iterables.");
 
 static PyObject *

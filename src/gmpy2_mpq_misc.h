@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_mpq_misc.h                                                        *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -37,6 +35,8 @@ static PyObject * GMPy_MPQ_Attrib_GetNumer(MPQ_Object *self, void *closure);
 static PyObject * GMPy_MPQ_Attrib_GetDenom(MPQ_Object *self, void *closure);
 static PyObject * GMPy_MPQ_Attrib_GetReal(MPQ_Object *self, void *closure);
 static PyObject * GMPy_MPQ_Attrib_GetImag(MPQ_Object *self, void *closure);
+static PyObject * GMPy_MPQ_Method_As_Integer_Ratio(PyObject *self, PyObject *Py_UNUSED(ignored));
+static PyObject * GMPy_MPQ_Method_From_As_Integer_Ratio(PyTypeObject *type, PyObject *const *args, Py_ssize_t nargs);
 
 static PyObject * GMPy_MPQ_Function_Numer(PyObject *self, PyObject *other);
 static PyObject * GMPy_MPQ_Function_Denom(PyObject *self, PyObject *other);

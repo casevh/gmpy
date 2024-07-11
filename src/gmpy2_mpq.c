@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_mpq.c                                                             *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -27,103 +25,42 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 PyDoc_STRVAR(GMPy_doc_mpq,
-"mpq() -> mpq(0,1)\n\n"
-"     If no argument is given, return mpq(0,1).\n\n"
-"mpq(n) -> mpq\n\n"
-"     Return an 'mpq' object with a numeric value n. Fraction values\n"
-"     are converted exactly.\n\n"
-"mpq(n,m) -> mpq\n\n"
-"     Return an 'mpq' object with a numeric value n/m.\n\n"
-"mpq(s[, base=10]) -> mpq\n\n"
-"     Return an 'mpq' object from a string s made up of digits in\n"
-"     the given base. s may be made up of two numbers in the same\n"
-"     base separated by a '/' character.\n");
+"mpq(n=0, /)\n"
+"mpq(n, m, /)\n"
+"mpq(s, /, base=10)\n\n"
+"Return a rational number constructed from a non-complex number n\n"
+"exactly or from a pair of `~numbers.Rational` values n and m or\n"
+"from a string s made up of digits in the given base.\n"
+"Every input, that is accepted by the `~fractions.Fraction` type\n"
+"constructor is also accepted.\n\n"
+"A string may be made up to two integers in the same base separated\n"
+"by a '/' character, both parsed the same as the `mpz` type constructor\n"
+"does.  If base is 0 then the leading characters are used to recognize the\n"
+"base, this is done separately for the numerator and denominator.  If\n"
+"base=10, any string that represents a finite value and is accepted by\n"
+"the `float` constructor is also accepted.");
 
 /* Since `gmpy2.mpq` is now a type and no longer a factory function, see
  * gmpy2_cache.c/GMPy_MPQ_NewInit for details on creation.
  */
 
-#ifdef PY3
 static PyNumberMethods mpq_number_methods =
 {
-    (binaryfunc) GMPy_MPQ_Add_Slot,         /* nb_add                  */
-    (binaryfunc) GMPy_MPQ_Sub_Slot,         /* nb_subtract             */
-    (binaryfunc) GMPy_MPQ_Mul_Slot,         /* nb_multiply             */
-    (binaryfunc) GMPy_MPQ_Mod_Slot,         /* nb_remainder            */
-    (binaryfunc) GMPy_MPQ_DivMod_Slot,      /* nb_divmod               */
-    (ternaryfunc) GMPy_MPANY_Pow_Slot,      /* nb_power                */
-    (unaryfunc) GMPy_MPQ_Minus_Slot,        /* nb_negative             */
-    (unaryfunc) GMPy_MPQ_Plus_Slot,         /* nb_positive             */
-    (unaryfunc) GMPy_MPQ_Abs_Slot,          /* nb_absolute             */
-    (inquiry) GMPy_MPQ_NonZero_Slot,        /* nb_bool                 */
-        0,                                  /* nb_invert               */
-        0,                                  /* nb_lshift               */
-        0,                                  /* nb_rshift               */
-        0,                                  /* nb_and                  */
-        0,                                  /* nb_xor                  */
-        0,                                  /* nb_or                   */
-    (unaryfunc) GMPy_MPQ_Int_Slot,          /* nb_int                  */
-        0,                                  /* nb_reserved             */
-    (unaryfunc) GMPy_MPQ_Float_Slot,        /* nb_float                */
-        0,                                  /* nb_inplace_add          */
-        0,                                  /* nb_inplace_subtract     */
-        0,                                  /* nb_inplace_multiply     */
-        0,                                  /* nb_inplace_remainder    */
-        0,                                  /* nb_inplace_power        */
-        0,                                  /* nb_inplace_lshift       */
-        0,                                  /* nb_inplace_rshift       */
-        0,                                  /* nb_inplace_and          */
-        0,                                  /* nb_inplace_xor          */
-        0,                                  /* nb_inplace_or           */
-    (binaryfunc) GMPy_MPQ_FloorDiv_Slot,    /* nb_floor_divide         */
-    (binaryfunc) GMPy_MPQ_TrueDiv_Slot,     /* nb_true_divide          */
-        0,                                  /* nb_inplace_floor_divide */
-        0,                                  /* nb_inplace_true_divide  */
-        0,                                  /* nb_index                */
+    .nb_add = (binaryfunc) GMPy_Number_Add_Slot,
+    .nb_subtract = (binaryfunc) GMPy_Number_Sub_Slot,
+    .nb_multiply = (binaryfunc) GMPy_Number_Mul_Slot,
+    .nb_remainder = (binaryfunc) GMPy_Number_Mod_Slot,
+    .nb_divmod = (binaryfunc) GMPy_Number_DivMod_Slot,
+    .nb_power = (ternaryfunc) GMPy_Number_Pow_Slot,
+    .nb_negative = (unaryfunc) GMPy_MPQ_Minus_Slot,
+    .nb_positive = (unaryfunc) GMPy_MPQ_Plus_Slot,
+    .nb_absolute = (unaryfunc) GMPy_MPQ_Abs_Slot,
+    .nb_bool = (inquiry) GMPy_MPQ_NonZero_Slot,
+    .nb_int =   (unaryfunc) GMPy_MPQ_Int_Slot,
+    .nb_float = (unaryfunc) GMPy_MPQ_Float_Slot,
+    .nb_floor_divide = (binaryfunc) GMPy_Number_FloorDiv_Slot,
+    .nb_true_divide = (binaryfunc) GMPy_Number_TrueDiv_Slot,
 };
-#else
-static PyNumberMethods mpq_number_methods =
-{
-    (binaryfunc) GMPy_MPQ_Add_Slot,         /* nb_add                  */
-    (binaryfunc) GMPy_MPQ_Sub_Slot,         /* nb_subtract             */
-    (binaryfunc) GMPy_MPQ_Mul_Slot,         /* nb_multiply             */
-    (binaryfunc) GMPy_MPQ_TrueDiv_Slot,     /* nb_divide               */
-    (binaryfunc) GMPy_MPQ_Mod_Slot,         /* nb_remainder            */
-    (binaryfunc) GMPy_MPQ_DivMod_Slot,      /* nb_divmod               */
-    (ternaryfunc) GMPy_MPANY_Pow_Slot,      /* nb_power                */
-    (unaryfunc) GMPy_MPQ_Minus_Slot,        /* nb_negative             */
-    (unaryfunc) GMPy_MPQ_Plus_Slot,         /* nb_positive             */
-    (unaryfunc) GMPy_MPQ_Abs_Slot,          /* nb_absolute             */
-    (inquiry) GMPy_MPQ_NonZero_Slot,        /* nb_bool                 */
-        0,                                  /* nb_invert               */
-        0,                                  /* nb_lshift               */
-        0,                                  /* nb_rshift               */
-        0,                                  /* nb_and                  */
-        0,                                  /* nb_xor                  */
-        0,                                  /* nb_or                   */
-        0,                                  /* nb_coerce               */
-    (unaryfunc) GMPy_MPQ_Int_Slot,          /* nb_int                  */
-    (unaryfunc) GMPy_MPQ_Long_Slot,         /* nb_long                 */
-    (unaryfunc) GMPy_MPQ_Float_Slot,        /* nb_float                */
-        0,                                  /* nb_oct                  */
-        0,                                  /* nb_hex                  */
-        0,                                  /* nb_inplace_add;         */
-        0,                                  /* nb_inplace_subtract     */
-        0,                                  /* nb_inplace_multiply     */
-        0,                                  /* nb_inplace_divide       */
-        0,                                  /* nb_inplace_remainder    */
-        0,                                  /* nb_inplace_power        */
-        0,                                  /* nb_inplace_lshift       */
-        0,                                  /* nb_inplace_rshift       */
-        0,                                  /* nb_inplace_and          */
-        0,                                  /* nb_inplace_xor          */
-        0,                                  /* nb_inplace_or           */
-    (binaryfunc) GMPy_MPQ_FloorDiv_Slot,    /* nb_floor_divide         */
-    (binaryfunc) GMPy_MPQ_TrueDiv_Slot,     /* nb_true_divide          */
-        0,                                  /* nb_inplace_floor_divide */
-        0,                                  /* nb_inplace_true_divide  */
-};
-#endif
 
 static PyGetSetDef GMPy_MPQ_getseters[] =
 {
@@ -147,61 +84,27 @@ static PyMethodDef GMPy_MPQ_methods [] =
     { "__trunc__", GMPy_MPQ_Method_Trunc, METH_NOARGS, GMPy_doc_mpq_method_trunc },
     { "conjugate", GMPy_MP_Method_Conjugate, METH_NOARGS, GMPy_doc_mp_method_conjugate },
     { "digits", GMPy_MPQ_Digits_Method, METH_VARARGS, GMPy_doc_mpq_digits_method },
-    { NULL, NULL, 1 }
+    { "as_integer_ratio", GMPy_MPQ_Method_As_Integer_Ratio, METH_NOARGS, GMPy_doc_mpq_method_as_integer_ratio },
+    { "from_float", (PyCFunction)GMPy_MPQ_Method_From_As_Integer_Ratio, METH_FASTCALL | METH_CLASS, GMPy_doc_mpq_method_from_float },
+    { "from_decimal", (PyCFunction)GMPy_MPQ_Method_From_As_Integer_Ratio, METH_FASTCALL | METH_CLASS, GMPy_doc_mpq_method_from_decimal },
+    { NULL }
 };
 
 static PyTypeObject MPQ_Type =
 {
-    /* PyObject_HEAD_INIT(&PyType_Type) */
-#ifdef PY3
     PyVarObject_HEAD_INIT(NULL, 0)
-#else
-    PyObject_HEAD_INIT(0)
-        0,                                  /* ob_size          */
-#endif
-    "mpq",                                  /* tp_name          */
-    sizeof(MPQ_Object),                     /* tp_basicsize     */
-        0,                                  /* tp_itemsize      */
-    /* methods */
-    (destructor) GMPy_MPQ_Dealloc,          /* tp_dealloc       */
-        0,                                  /* tp_print         */
-        0,                                  /* tp_getattr       */
-        0,                                  /* tp_setattr       */
-        0,                                  /* tp_reserved      */
-    (reprfunc) GMPy_MPQ_Repr_Slot,          /* tp_repr          */
-    &mpq_number_methods,                    /* tp_as_number     */
-        0,                                  /* tp_as_sequence   */
-        0,                                  /* tp_as_mapping    */
-    (hashfunc) GMPy_MPQ_Hash_Slot,          /* tp_hash          */
-        0,                                  /* tp_call          */
-    (reprfunc) GMPy_MPQ_Str_Slot,           /* tp_str           */
-    (getattrofunc) 0,                       /* tp_getattro      */
-    (setattrofunc) 0,                       /* tp_setattro      */
-        0,                                  /* tp_as_buffer     */
-#ifdef PY3
-    Py_TPFLAGS_DEFAULT,                     /* tp_flags         */
-#else
-    Py_TPFLAGS_HAVE_RICHCOMPARE |
-        Py_TPFLAGS_CHECKTYPES,              /* tp_flags         */
-#endif
-    GMPy_doc_mpq,                           /* tp_doc           */
-        0,                                  /* tp_traverse      */
-        0,                                  /* tp_clear         */
-    (richcmpfunc)&GMPy_RichCompare_Slot,    /* tp_richcompare   */
-        0,                                  /* tp_weaklistoffset*/
-        0,                                  /* tp_iter          */
-        0,                                  /* tp_iternext      */
-    GMPy_MPQ_methods,                       /* tp_methods       */
-        0,                                  /* tp_members       */
-    GMPy_MPQ_getseters,                     /* tp_getset        */
-        0,                                  /* tp_base          */
-        0,                                  /* tp_dict          */
-        0,                                  /* tp_descr_get     */
-        0,                                  /* tp_descr_set     */
-        0,                                  /* tp_dictoffset    */
-        0,                                  /* tp_init          */
-        0,                                  /* tp_alloc         */
-    GMPy_MPQ_NewInit,                       /* tp_new           */
-        0,                                  /* tp_free          */
+    .tp_name = "gmpy2.mpq",
+    .tp_basicsize = sizeof(MPQ_Object),
+    .tp_dealloc = (destructor) GMPy_MPQ_Dealloc,
+    .tp_repr = (reprfunc) GMPy_MPQ_Repr_Slot,
+    .tp_as_number = &mpq_number_methods,
+    .tp_hash = (hashfunc) GMPy_MPQ_Hash_Slot,
+    .tp_str = (reprfunc) GMPy_MPQ_Str_Slot,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_doc = GMPy_doc_mpq,
+    .tp_richcompare = (richcmpfunc)&GMPy_RichCompare_Slot,
+    .tp_methods = GMPy_MPQ_methods,
+    .tp_getset = GMPy_MPQ_getseters,
+    .tp_new =GMPy_MPQ_NewInit,
 };
 

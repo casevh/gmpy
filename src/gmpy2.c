@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2.c                                                                 *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -56,369 +54,18 @@
  *
  * Some hacks by Gustavo Niemeyer <niemeyer@conectiva.com>.
  *
- *   0.1, pre-alpha; date: 2000-11-06  first placed on sourceforge
- *
- *   0.2, still pre-alpha: 2000-11-15: bugfixes re formatting (tx, Peanu!)
- *   no tags on oct() and hex() of mpz's
- *   insert 'tagoff' in options (gmpy.mpz() vs mpz() in repr) (for Peanu!)
- *   speedups for _nonzero & _cmp (tx, Peanu!)
- *   slight speedup (7/8%?) for excess reallocs 4<->8 bytes (Peanu's help!)
- *   added copy/fcopy; bin; fib; remove
- *
- *   0.3, still pre-alpha, but...:
- *   performance tweaks via mpz-caching & fixed-constants
- *   added get/set functions for zcache, zco min/max
- *   added get-only function for versions (of gmp, and of gmpy)
- *   removed all 'traces' of mutability (to be re-done... much later!)
- *   cleaned up all of the mpz_cmp_ui(X,0) to mpz_sgn(X)
- *   cleaned up Py_BuildValue usage (N vs O, explicit-() for tuples)
- *   added numdigits, lowbits, root, next_prime, invert, popcount,
- *      hamdist, scan0, scan1
- *   renamed bin to bincoef
- *
- *   0.4:
- *   split gmpy.c/gmpy.h introducing C-API interface (Pearu's suggestion)
- *   cleanup some casts using Pearu's new macros
- *   further cache-tweaks at Pearu's suggestion (macros introduced)
- *   added sign (Pearu's request), getbit, setbit
- *   added docstrings
- *   renamed copy functions to start with _ ('internal, private')
- *   added .comb as a synonym of .bincoef
- *
- *   0.5:
- *   added jacobi, legendre, kronecker
- *   added random-number generation, seed set/save, shuffling
- *   added mpq (at last!-)
- *
- *   0.6: (lots of good ideas from Pearu once more!-):
- *   fixed silly bugs in kronecker and mpq_abs
- *   gmpy-level workaround for scan0/scan1 bugs (?) in GMP 3.1.1
- *   added qdiv; anynum->mpq substituted for all such conversions
- *       (also anynum->mpz and anynum->mpf by analogy, with care!)
- *   added global.fcoform for optional use of intermediate string in
- *       float2mpf (used for any float->mpf conversion)
- *   added set_fcoform function for global.fcoform access
- *   general cleanup of sources; added alloca for MSVC++;
- *       many sundry minor bugfixes & uniformization;
- *       a little useful refactoring (more would be good...)
- *   added caching of mpq objects
- *   power for mpq
- *   Stern-Brocot algorithm for mpf->mpq (also exposed as f2q)
- *       also used for float->mpq
- *       with stricter tracking of mpf's requested-precision
- *       added getrprec method to mpf, getrprec module-function
- *   exposed ceil, floor and trunc methods/functions for mpf's
- *   changed a couple exceptions from Value to ZeroDivision
- *   added 'qual' and 'floa' options to gmpy.rand
- *
- *   0.7: (good feedback from Keith Briggs, some advice from Tim Peters
- *      and Fred Lundh -- thanks all!):
- *   fixed bug of '"%d" where "%ld" was meant' in many places
- *      and other sundry minor warnings given by gcc
- *   fixed hash (delegating to Python) so mp[nqz](x) will
- *      produce the same value as hash(x) for any Python number x
- *   workaround for GMP 3.1.1 bug, mpz_root wrongly returning
- *      'exact' for non-exact root if dest==source, which stopped
- *      needed value-error for inexact mpq**mpq operations
- *   determined correct 'actual precision' of floats
- *   explicitly stored precision with binary-form mpf's
- *   extended explicit-bits request to all ->mpf operations
- *     (good in itself, plus, preparing for future MPFR)
- *   removed the limitation of no binary-form for <0 mpz
- *   introduced macros to parse args, for conciseness
- *
- *   0.8: (again, requests & suggestions by great Pearu!)
- *   raise test coverage 72.5% -> 90.0%
- *   introduced callbacks (not documented/tested for now;
- *       Pearu will test/support/document in PySymbolic)
- *   some errors went undiagnosed, caused crash: now fixed
- *   workaround for GMP bug(?s?) in mpz_fits_... (?)
- *   added exposure of mpf_ sqrt and pow_ui
- *
- *   0.9: (ditto)
- *   change ValueError to OverflowError for 'too-large' errors
- *   fix bug in mpq_pow (negative base, exp. with odd denominator)
- *       (fix now corrected -- _even_ denominator is the error!)
- *   fixed gcc warnings reported by K. Briggs
- *
- *   0.9b:
- *   support GMP 4 (but added no GMP4-only functionality yet)
- *
- *   0.9c:
- *   updated tests to 0.9, better coverage
- *
- *   1.0:
- *   minor cleanups, ensure support for Python 2.3
- *   fixed misdiagnosis of some argument counts in macro
- *     SELF_ONE_ARG_CONVERTED (tx to Paul Rubin!)
- *
- *   1.01:
- *   cleanups, ensure support for Python 2.4.1 on MacOSX 10.4/XCode 2.1
- *     as well as Python 2.2 and 2.3 (on MacOSX and Linux)
- *   fixed memory leak on divm (thanks to mensanator@aol.com)
- *   fixed bug on mpq('123') [[str2mpq on string w/o a slash]]
- *   added floordiv and truediv operators, and tests for them
- *   NOT tested on GMP 3 (have none left around...), ONLY on GMP 4.*
- *
- *   1.02:
- *   fix warning in comparison of mpq's
- *   added support of mpq('12.34') [[string w/o a slash, but with a dot]]
- *   fixes for 64-bit build (thanks to a patch by dmcooke)
- *   added experimental support for decimal.Decimal (and user-coded types)
- *      via wider use of special conversion methods (if present) and their
- *      sly insertion on-the-fly into the decimal.Decimal class (!)
- *   two bugfixes, thanks to Simon Burton
- *   Brought back into C89 compliance (thanks to Chip Turner), had
- *      drifted to C99 (declarations in the middle of the code).
- *   Python 2.5 support (Py_ssize_t, __index__) thanks to Chip Turner
- *   Pushed coverage to 93.3% (missing only "sanity check" level error
- *      tests [mostly for out-of-memory conditions], output to stderr
- *      conditioned by global.debug, & a couple of very obscure cases)
- *
- *   1.03:
- *   Fixed the bug that caused crashes on gmpy.mpf(float('inf')) and
- *      other such conversions, implicit and explicit
- *   Fixed a bug in get_zconst's prototype affecting 64-bit machines,
- *      thanks to Gary Bunting
- *   Fixed a bug in hashing on 64-bit systems. hash(long) now equals
- *      hash(mpz) for large values. (casevh)
- *   Changed int() to return a long value instead of OverFlowError.
- *      Complies with PEP 237. (casevh)
- *   Added support in setup.py for darwinports/macports build of GMP
- *      on MacOSX. (aleaxit)
- *
- *   1.04:
- *   Avoid GMP/mingw32 bug when converting very small floats to mpz.
- *      (casevh)
- *   Significant performance improvement for long->mpz and mpz->long.
- *      (casevh)
- *   Added "rich comparisons" to mpz, mpq and mpf types (aleaxit)
- *   Added additional tests (casevh, aleaxit)
- *   Fixed bug when converting very large mpz to str (casevh)
- *   Faster conversion from mpz->binary and binary->mpz (casevh)
- *   Added support for pickling (casevh)
- *   Added divexact (casevh)
- *   Fixed mpf comparisons by rounding mpf results when GMP returns
- *      a longer result. Added fround() (casevh)
- *   Added bit_length (Thanks Mario Pernici)
- *   Added helper functions for mpmath (casevh)
- *   Faster conversion from mpq->binary and binary->mpq (casevh)
- *   Recognize MPIR, mpir_version() (casevh)
- *
- *   1.10:
- *   Remove dependancy on pymemcompat.h (casevh)
- *   Remove callback (casevh)
- *   Added support for -DMPIR to include MPIR instead of GMP (casevh)
- *   Major code revisions to add support for Python 3.x (casevh)
- *   Fixed bug in binary() and qbinary() (casevh)
- *   Fixed bug in rich comparisons (casevh)
- *   Added % and divmod support to mpq and mpf (casevh)
- *   Changed memory allocation functions to use PyMem (casevh)
- *   Removed small number interning (casevh)
- *   Added tdivmod, cdivmod, and fdivmod (casevh)
- *   Added more helper functions for mpmath (casevh)
- *   Faster mpz<>PyLong conversion (casevh)
- *   Faster hash(mpz) (casevh)
- *
- *   1.11:
- *   Recognize True/False (bug in 1.10) (casevh)
- *   Optimize argument handling (casevh)
- *   Added caching for mpz (casevh)
- *
- ************************************************************************
- *
- *   2.0.0 alpha and b1:
- *   Added caching for mpq (casevh)
- *   Added rootrem, fib2, lucas, lucas2 (casevh)
- *   Removed mpf.setprec(), use mpf.round() (casevh)
- *   Fix test compatibility with Python 3.1.2 and 3.2 (casevh)
- *   Support changed hash function in Python 3.2 (casevh)
- *   Added is_even, is_odd (casevh)
- *   Rename to gmpy2 to allow backwards incompatible changes (casevh)
- *   Remove old random number functions, to be replaced later (casevh)
- *   Add caching of the calculated hash value (casevh)
- *   Add xmpz (mutable mpz) type (casevh)
- *   Fix mpq formatting issue (casevh)
- *   Add read/write bit access using slices to xmpz (casevh)
- *   Add read-only bit access using slices to mpz (casevh)
- *   Add pack()/unpack() methods (casevh)
- *   Remove tagoff option (casevh)
- *   Add support for MPFR (casevh)
- *   Debug messages only available if compiled with -DDEBUG (casevh)
- *   Removed fcoform float conversion modifier (casevh)
- *   Add support for MPC (casevh)
- *   Renamed 'mpf' to 'mpfr' to reflect use of MPFR (casevh)
- *   Added context manager (casevh)
- *   Allow building with just GMP/MPIR if MPFR not available (casevh)
- *   Allow building with GMP/MPIR and MPFR if MPC not available (casevh)
- *   Removed most instance methods in favor of gmpy2.method (casevh)
- *   Added __ceil__, __floor__, and __trunc__ methods (casevh)
- *   Removed gmpy2.pow to avoid conflicts (casevh)
- *   Removed gmpy2._copy and added xmpz.copy (casevh)
- *   Added support for __format__ (casevh)
- *   Completed support for MPC (casevh)
- *   Added as_integer_ratio, as_mantissa_exp, as_simple_fraction (casevh)
- *   Update rich_compare (casevh)
- *   Require MPFR 3.1.0+ to get divby0 support (casevh)
- *   Added fsum(), degrees(), radians() (casevh)
- *   Renamed context() -> local_context(), new_context() -> context() (casevh)
- *   Added get_context() (casevh)
- *   Added random number generation support (casevh)
- *   Changed license to LGPL 3+ (casevh)
- *   Added lucasu, lucasu_mod, lucasv, and lucasv_mod (casevh)
- *      (Based on code contributed by David Cleaver.)
- *   Added probable-prime tests (casevh)
- *      (Based on code contributed by David Cleaver.)
- *   Added to_binary()/from_binary (casevh)
- *   Renamed numdigits() to num_digits() (casevh)
- *   Added keyword precision to constants (casevh)
- *   Added addmul() and submul() (casevh)
- *   Added __round__(), round2(), round_away() for mpfr (casevh)
- *   round() is no longer a module level function (casevh)
- *   pow() is no longer a module level function (casevh)
- *   Renamed module functions min()/max() to min2()/max2() (casevh)
- *      No longer conflicts with builtin min() and max()
- *   Removed set_debug() and related functionality (casevh)
- *   Released as 2.0.0b1
- *
- *   2.0.0b2
- *   Allow xmpz slice assignment to increase length of xmpz instance by
- *      specifying a value for stop (casevh)
- *   Fixed ref-count bug in several is_xxx_prp tests (casevh)
- *   Added iter_bits, iter_clear, iter_set methods to xmpz (casevh)
- *   Added powmod() for easy access to three argument pow() (casevh)
- *   Removed addmul() and submul() since they are slower than (casevh)
- *      just using Python code
- *   Bug fix in gcd_ext when both arguments are not mpz (casevh)
- *   Added ieee() to create contexts for 32, 64, or 128 bit floats (casevh)
- *   Bug fix in context() not setting emax/emin correctly if they (casevh)
- *      had been changed earlier
- *   Contexts can be directly used in with statement without (casevh)
- *      requiring set_context()/local_context() sequence
- *   local_context() now accepts an optional context (casevh)
- *
- *   2.0.0b3
- *   mp_version(), mpc_version(), and mpfr_version() shouldn't (casevh)
- *      return Unicode on Python 2.x
- *   Fix warnings when shifting 32-bit integer by 32 bits (casevh)
- *   Faster conversion of Fraction to gmpy2 types (casevh)
- *   Fix conversion with Decimal, especially on Python 3.3 (casevh)
- *   Consistently return OverflowError when converting "inf" (casevh)
- *   Fix mpz.__format__() with # code (casevh)
- *   Add is_infinite(), deprecate is_inf() (casevh)
- *   Add is_finite(), deprecate is_number() (casevh)
- *   Fixed issues with mpc() and various is_XXX() functions (casevh)
- *   Fixed error handling with mpc(); mpc(1,"nan") is properly (casevh)
- *      handled
- *   Added caching for mpc objects; faster when real and  (casevh)
- *      imaginary precisions are equal
- *   Add optimal path for mpfr/mpc + - * / when both operands (casevh)
- *      have the same type
- *   Fix mpfr + float segmentation fault (casevh)
- *
- *   2.0.0b4
- *   Add __ceil__, __floor__, __trunc__, __round__ to mpz & mpq (casevh)
- *   Add __complex__ to mpc (casevh)
- *   round(mpfr) now correctly returns an mpz (casevh)
- *   Add mpz.denominator and mpz.numerator (casevh)
- *   mpz() returns mpz(0); also xmpz, mpq, mpfr, and mpc (casevh)
- *   Fix bug when comparing mpz to mpq (with mpz on left) (casevh)
- *   Add __sizeof__ (casevh)
- *
- *   2.0.0
- *   Fix segfault in _mpmath_normalize if rnd not specified (casevh)
- *   Improved setup.py (casevh)
- *   Fix issues encountered when compiled without MPFR support (casevh)
- *   Conversion of too large an mpz to float now raises OverflowError (casevh)
- *   Renamed module functions min2()/max2() to minnum()/maxnum() (casevh)
- *   Added copy() method to contexts (casevh)
- *   get_context() no longer supports keyword arguments (casevh)
- *
- ************************************************************************
- *
- *   2.1.0
- *   Improvements to setup.py.
- *   Add thread-safe contexts.
- *   MPFR and MPC are now required.
- *   Invalid Operation exception now raised for addition, etc.
- *   inverse() now raises exception if inverse does not exist.
- *   Add context methods.
- *   Major code refactoring required to properly support thread-safe
- *      contexts.
- *   __str__ and __repr__ no longer append "L" on Python 2.
- *   mpq(mpfr) now returns the exact result.
- *   Fix repr(mpc) for precision >325 bits.
- *   Intermediate conversions of Integer to mpfr are now done with the
- *      full precision of the Integer.
- *   Remove support for interaction with Decimal type.
- *   No longer attempt to override the memory allocation functions.
- *   Register gmpy2 types into the numeric tower.
- *   mpz(x) call int(x) if mpz() does not know how to convert x
- *      directly.
- *   Convert `mpz` to a type using __new__ instead of a factory
- *      function.
- *
- *   2.1.0a1
- *   Initial release.
- *
- *   2.1.0a2
- *   Revised build process.
- *   Removal of unused code/macros.
- *   Cleanup of Cython interface.
- *
- *   2.1.0a3
- *   Updates to setup.py.
- *   Initial support for MPFR4
- *     - Add nrandom()
- *     - grandom() now calls nrandom twice; may return different values versus
- *       MPFR3
- *     - Add rootn(); same as root() except different sign when taking even root
- *       of -0.0
- *
- *    2.1.0a4
- *    Fix issue 204; missing file for Cython.
- *    Additional support for MPFR 4
- *      - Add fmma() and fmms()
- *
- *    2.1.0a5
- *    Fix qdiv() not returning mpz() when it should.
- *    Added root_of_unity()
- *
- *    2.1.0b1
- *    Added cmp() and cmp_abs().
- *    Improved compatibility with _numbers_ protocol.
- *    Many bug fixes.
- *
- *    2.1.0b2
- *    Many bug fixes.
- *
- *    2.1.0b3
- *    Version bump only.
- *
- *    2.1.0b4
- *    Fix comparisons with mpq and custom rational objects.
- *    Fixes for some uncommon integer conversions scenarios.
- *
- *    2.1.0b5
- *    Avoid MPFR bug in mfr_fac_ui (gmpy2.factorial) on platforms where long
- *        is 32-bits and argument is >= 44787929.
- *    Fixed testing bugs with Python 2.7.
- *    Fixed mpz(0) to C long or long long.
- *    Fixed incorrect results in f2q().
- *
- *
  ************************************************************************
  *
  * Discussion on sizes of C integer types.
  *
- * GMP, MPIR, MPFR, and MPC use typedef to create integer objects with
+ * GMP, MPFR, and MPC use typedef to create integer objects with
  * different sizes. It can become confusing to map the different types
  * onto the standard C types used by Python's C API. Below are external
  * types and how they map to C types. The assumptions are verified when
  * the module is initialized.
  *
  * mp_limb_t: This is usually an 'unsigned long' but is an 'unsigned
- *     long long' on MPIR/64-bit Windows.
+ *     long long' on certain 64-bit Windows builds.
  *
  * mp_bitcnt_t: This is usually an 'unsigned long' but is an 'unsigned
  *     long long' on MPIR/64-bit Windows. 'size_t' is the best match.
@@ -441,7 +88,7 @@
  ************************************************************************
  */
 #define PY_SSIZE_T_CLEAN
-#include "Python.h"
+#include <Python.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -454,7 +101,12 @@
  * we do have a dependence on Python's internals, specifically:
  * how Python "long int"s are internally represented.
  */
-#include "longintrepr.h"
+
+#if PY_VERSION_HEX < 0x030B0000
+# include <longintrepr.h>
+#else
+# include <cpython/longintrepr.h>
+#endif
 
 #define GMPY2_MODULE
 #include "gmpy2.h"
@@ -466,51 +118,52 @@
 
 /* The following global strings are used by gmpy_misc.c. */
 
-char gmpy_version[] = "2.1.0b5";
+char gmpy_version[] = "2.2.0";
 
 char gmpy_license[] = "\
 The GMPY2 source code is licensed under LGPL 3 or later. The supported \
-versions of the GMP/MPIR, MPFR, and MPC libraries are also licensed under \
+versions of the GMP, MPFR, and MPC libraries are also licensed under \
 LGPL 3 or later.";
 
 /* The following global structures are used by gmpy_cache.c.
  */
 
-struct gmpy_global {
-    int cache_size;          /* size of cache, for all caches */
-    int cache_obsize;        /* maximum size of the objects that are cached */
+#define CACHE_SIZE (100)
+#define MAX_CACHE_MPZ_LIMBS (64)
+#define MAX_CACHE_MPFR_BITS (1024)
+
+typedef struct {
     mpz_t tempz;             /* Temporary variable used for integer conversions */
 
-    MPZ_Object **gmpympzcache;
+    MPZ_Object *gmpympzcache[CACHE_SIZE];
     int in_gmpympzcache;
 
-    XMPZ_Object **gmpyxmpzcache;
+    XMPZ_Object *gmpyxmpzcache[CACHE_SIZE];
     int in_gmpyxmpzcache;
 
-    MPQ_Object **gmpympqcache;
+    MPQ_Object *gmpympqcache[CACHE_SIZE];
     int in_gmpympqcache;
 
-    MPFR_Object **gmpympfrcache;
+    MPFR_Object *gmpympfrcache[CACHE_SIZE];
     int in_gmpympfrcache;
 
-    MPC_Object **gmpympccache;
+    MPC_Object *gmpympccache[CACHE_SIZE];
     int in_gmpympccache;
+} gmpy_global;
+
+static gmpy_global global = {
+    .in_gmpympzcache = 0,
+    .in_gmpyxmpzcache = 0,
+    .in_gmpympqcache = 0,
+    .in_gmpympfrcache = 0,
+    .in_gmpympccache = 0,
 };
 
-static struct gmpy_global global;
+/* Support for context manager using context vars.
+ * Requires Python 3.7 or later.
+ */
 
-/* Support for context manager. */
-
-#ifdef WITHOUT_THREADS
-/* Use a module-level context. */
-static CTXT_Object *module_context = NULL;
-#else
-/* Key for thread state dictionary */
-static PyObject *tls_context_key = NULL;
-/* Invariant: NULL or the most recently accessed thread local context */
-static CTXT_Object *cached_context = NULL;
-#endif
-
+static PyObject *current_context_var = NULL;
 
 /* Define gmpy2 specific errors for mpfr and mpc data types. No change will
  * be made the exceptions raised by mpz, xmpz, and mpq.
@@ -569,7 +222,6 @@ static PyObject *GMPyExc_Erange = NULL;
 #include "gmpy2_mpz_divmod2exp.c"
 #include "gmpy2_mpz_pack.c"
 #include "gmpy2_mpz_bitops.c"
-#include "gmpy2_mpz_inplace.c"
 #include "gmpy2_xmpz_inplace.c"
 
 /* Begin includes of refactored code. */
@@ -619,20 +271,20 @@ static PyObject *GMPyExc_Erange = NULL;
 
 static PyMethodDef Pygmpy_methods [] =
 {
-    { "_printf", GMPy_printf, METH_VARARGS, GMPy_doc_function_printf },
     { "add", GMPy_Context_Add, METH_VARARGS, GMPy_doc_function_add },
     { "bit_clear", GMPy_MPZ_bit_clear_function, METH_VARARGS, doc_bit_clear_function },
+    { "bit_count", GMPy_MPZ_bit_count, METH_O, doc_bit_count },
     { "bit_flip", GMPy_MPZ_bit_flip_function, METH_VARARGS, doc_bit_flip_function },
     { "bit_length", GMPy_MPZ_bit_length_function, METH_O, doc_bit_length_function },
     { "bit_mask", GMPy_MPZ_bit_mask, METH_O, doc_bit_mask },
-    { "bit_scan0", GMPy_MPZ_bit_scan0_function, METH_VARARGS, doc_bit_scan0_function },
-    { "bit_scan1", GMPy_MPZ_bit_scan1_function, METH_VARARGS, doc_bit_scan1_function },
+    { "bit_scan0", (PyCFunction)GMPy_MPZ_bit_scan0_function, METH_FASTCALL, doc_bit_scan0_function },
+    { "bit_scan1", (PyCFunction)GMPy_MPZ_bit_scan1_function, METH_FASTCALL, doc_bit_scan1_function },
     { "bit_set", GMPy_MPZ_bit_set_function, METH_VARARGS, doc_bit_set_function },
-    { "bit_test", GMPy_MPZ_bit_test_function, METH_VARARGS, doc_bit_test_function },
-    { "bincoef", GMPy_MPZ_Function_Bincoef, METH_VARARGS, GMPy_doc_mpz_function_bincoef },
+    { "bit_test", (PyCFunction)GMPy_MPZ_bit_test_function, METH_FASTCALL, doc_bit_test_function },
+    { "bincoef", (PyCFunction)GMPy_MPZ_Function_Bincoef, METH_FASTCALL, GMPy_doc_mpz_function_bincoef },
     { "cmp", GMPy_MPANY_cmp, METH_VARARGS, GMPy_doc_mpany_cmp },
     { "cmp_abs", GMPy_MPANY_cmp_abs, METH_VARARGS, GMPy_doc_mpany_cmp_abs },
-    { "comb", GMPy_MPZ_Function_Bincoef, METH_VARARGS, GMPy_doc_mpz_function_comb },
+    { "comb", (PyCFunction)GMPy_MPZ_Function_Bincoef, METH_FASTCALL, GMPy_doc_mpz_function_comb },
     { "c_div", GMPy_MPZ_c_div, METH_VARARGS, doc_c_div },
     { "c_div_2exp", GMPy_MPZ_c_div_2exp, METH_VARARGS, doc_c_div_2exp },
     { "c_divmod", GMPy_MPZ_c_divmod, METH_VARARGS, doc_c_divmod },
@@ -642,8 +294,8 @@ static PyMethodDef Pygmpy_methods [] =
     { "denom", GMPy_MPQ_Function_Denom, METH_O, GMPy_doc_mpq_function_denom },
     { "digits", GMPy_Context_Digits, METH_VARARGS, GMPy_doc_context_digits },
     { "div", GMPy_Context_TrueDiv, METH_VARARGS, GMPy_doc_truediv },
-    { "divexact", GMPy_MPZ_Function_Divexact, METH_VARARGS, GMPy_doc_mpz_function_divexact },
-    { "divm", GMPy_MPZ_Function_Divm, METH_VARARGS, GMPy_doc_mpz_function_divm },
+    { "divexact", (PyCFunction)GMPy_MPZ_Function_Divexact, METH_FASTCALL, GMPy_doc_mpz_function_divexact },
+    { "divm", (PyCFunction)GMPy_MPZ_Function_Divm, METH_FASTCALL, GMPy_doc_mpz_function_divm },
     { "double_fac", GMPy_MPZ_Function_DoubleFac, METH_O, GMPy_doc_mpz_function_double_fac },
     { "fac", GMPy_MPZ_Function_Fac, METH_O, GMPy_doc_mpz_function_fac },
     { "fib", GMPy_MPZ_Function_Fib, METH_O, GMPy_doc_mpz_function_fib },
@@ -656,18 +308,17 @@ static PyMethodDef Pygmpy_methods [] =
     { "f_divmod_2exp", GMPy_MPZ_f_divmod_2exp, METH_VARARGS, doc_f_divmod_2exp },
     { "f_mod", GMPy_MPZ_f_mod, METH_VARARGS, doc_f_mod },
     { "f_mod_2exp", GMPy_MPZ_f_mod_2exp, METH_VARARGS, doc_f_mod_2exp },
-    { "gcd", GMPy_MPZ_Function_GCD, METH_VARARGS, GMPy_doc_mpz_function_gcd },
-    { "gcdext", GMPy_MPZ_Function_GCDext, METH_VARARGS, GMPy_doc_mpz_function_gcdext },
-    { "get_cache", GMPy_get_cache, METH_NOARGS, GMPy_doc_get_cache },
+    { "gcd", (PyCFunction)GMPy_MPZ_Function_GCD, METH_FASTCALL, GMPy_doc_mpz_function_gcd },
+    { "gcdext", (PyCFunction)GMPy_MPZ_Function_GCDext, METH_FASTCALL, GMPy_doc_mpz_function_gcdext },
     { "hamdist", GMPy_MPZ_hamdist, METH_VARARGS, doc_hamdist },
-    { "invert", GMPy_MPZ_Function_Invert, METH_VARARGS, GMPy_doc_mpz_function_invert },
-    { "iroot", GMPy_MPZ_Function_Iroot, METH_VARARGS, GMPy_doc_mpz_function_iroot },
-    { "iroot_rem", GMPy_MPZ_Function_IrootRem, METH_VARARGS, GMPy_doc_mpz_function_iroot_rem },
+    { "invert", (PyCFunction)GMPy_MPZ_Function_Invert, METH_FASTCALL, GMPy_doc_mpz_function_invert },
+    { "iroot", (PyCFunction)GMPy_MPZ_Function_Iroot, METH_FASTCALL, GMPy_doc_mpz_function_iroot },
+    { "iroot_rem", (PyCFunction)GMPy_MPZ_Function_IrootRem, METH_FASTCALL, GMPy_doc_mpz_function_iroot_rem },
     { "isqrt", GMPy_MPZ_Function_Isqrt, METH_O, GMPy_doc_mpz_function_isqrt },
     { "isqrt_rem", GMPy_MPZ_Function_IsqrtRem, METH_O, GMPy_doc_mpz_function_isqrt_rem },
     { "is_bpsw_prp", GMPY_mpz_is_bpsw_prp, METH_VARARGS, doc_mpz_is_bpsw_prp },
-    { "is_congruent", GMPy_MPZ_Function_IsCongruent, METH_VARARGS, GMPy_doc_mpz_function_is_congruent },
-    { "is_divisible", GMPy_MPZ_Function_IsDivisible, METH_VARARGS, GMPy_doc_mpz_function_is_divisible },
+    { "is_congruent", (PyCFunction)GMPy_MPZ_Function_IsCongruent, METH_FASTCALL, GMPy_doc_mpz_function_is_congruent },
+    { "is_divisible", (PyCFunction)GMPy_MPZ_Function_IsDivisible, METH_FASTCALL, GMPy_doc_mpz_function_is_divisible },
     { "is_even", GMPy_MPZ_Function_IsEven, METH_O, GMPy_doc_mpz_function_is_even },
     { "is_euler_prp", GMPY_mpz_is_euler_prp, METH_VARARGS, doc_mpz_is_euler_prp },
     { "is_extra_strong_lucas_prp", GMPY_mpz_is_extrastronglucas_prp, METH_VARARGS, doc_mpz_is_extrastronglucas_prp },
@@ -676,17 +327,18 @@ static PyMethodDef Pygmpy_methods [] =
     { "is_lucas_prp", GMPY_mpz_is_lucas_prp, METH_VARARGS, doc_mpz_is_lucas_prp },
     { "is_odd", GMPy_MPZ_Function_IsOdd, METH_O, GMPy_doc_mpz_function_is_odd },
     { "is_power", GMPy_MPZ_Function_IsPower, METH_O, GMPy_doc_mpz_function_is_power },
-    { "is_prime", GMPy_MPZ_Function_IsPrime, METH_VARARGS, GMPy_doc_mpz_function_is_prime },
+    { "is_prime", (PyCFunction)GMPy_MPZ_Function_IsPrime, METH_FASTCALL, GMPy_doc_mpz_function_is_prime },
+    { "is_probab_prime", (PyCFunction)GMPy_MPZ_Function_IsProbabPrime, METH_FASTCALL, GMPy_doc_mpz_function_is_probab_prime },
     { "is_selfridge_prp", GMPY_mpz_is_selfridge_prp, METH_VARARGS, doc_mpz_is_selfridge_prp },
     { "is_square", GMPy_MPZ_Function_IsSquare, METH_O, GMPy_doc_mpz_function_is_square },
     { "is_strong_prp", GMPY_mpz_is_strong_prp, METH_VARARGS, doc_mpz_is_strong_prp },
     { "is_strong_bpsw_prp", GMPY_mpz_is_strongbpsw_prp, METH_VARARGS, doc_mpz_is_strongbpsw_prp },
     { "is_strong_lucas_prp", GMPY_mpz_is_stronglucas_prp, METH_VARARGS, doc_mpz_is_stronglucas_prp },
     { "is_strong_selfridge_prp", GMPY_mpz_is_strongselfridge_prp, METH_VARARGS, doc_mpz_is_strongselfridge_prp },
-    { "jacobi", GMPy_MPZ_Function_Jacobi, METH_VARARGS, GMPy_doc_mpz_function_jacobi },
-    { "kronecker", GMPy_MPZ_Function_Kronecker, METH_VARARGS, GMPy_doc_mpz_function_kronecker },
-    { "lcm", GMPy_MPZ_Function_LCM, METH_VARARGS, GMPy_doc_mpz_function_lcm },
-    { "legendre", GMPy_MPZ_Function_Legendre, METH_VARARGS, GMPy_doc_mpz_function_legendre },
+    { "jacobi", (PyCFunction)GMPy_MPZ_Function_Jacobi, METH_FASTCALL, GMPy_doc_mpz_function_jacobi },
+    { "kronecker", (PyCFunction)GMPy_MPZ_Function_Kronecker, METH_FASTCALL, GMPy_doc_mpz_function_kronecker },
+    { "lcm", (PyCFunction)GMPy_MPZ_Function_LCM, METH_FASTCALL, GMPy_doc_mpz_function_lcm },
+    { "legendre", (PyCFunction)GMPy_MPZ_Function_Legendre, METH_FASTCALL, GMPy_doc_mpz_function_legendre },
     { "license", GMPy_get_license, METH_NOARGS, GMPy_doc_license },
     { "lucas", GMPy_MPZ_Function_Lucas, METH_O, GMPy_doc_mpz_function_lucas },
     { "lucasu", GMPY_mpz_lucasu, METH_VARARGS, doc_mpz_lucasu },
@@ -705,18 +357,23 @@ static PyMethodDef Pygmpy_methods [] =
     { "mpz_rrandomb", GMPy_MPZ_rrandomb_Function, METH_VARARGS, GMPy_doc_mpz_rrandomb_function },
     { "mpz_urandomb", GMPy_MPZ_urandomb_Function, METH_VARARGS, GMPy_doc_mpz_urandomb_function },
     { "mul", GMPy_Context_Mul, METH_VARARGS, GMPy_doc_function_mul },
-    { "multi_fac", GMPy_MPZ_Function_MultiFac, METH_VARARGS, GMPy_doc_mpz_function_multi_fac },
+    { "multi_fac", (PyCFunction)GMPy_MPZ_Function_MultiFac, METH_FASTCALL, GMPy_doc_mpz_function_multi_fac },
     { "next_prime", GMPy_MPZ_Function_NextPrime, METH_O, GMPy_doc_mpz_function_next_prime },
+#if (__GNU_MP_VERSION > 6) || (__GNU_MP_VERSION == 6 &&  __GNU_MP_VERSION_MINOR >= 3)
+    { "prev_prime", GMPy_MPZ_Function_PrevPrime, METH_O, GMPy_doc_mpz_function_prev_prime },
+#endif
     { "numer", GMPy_MPQ_Function_Numer, METH_O, GMPy_doc_mpq_function_numer },
-    { "num_digits", GMPy_MPZ_Function_NumDigits, METH_VARARGS, GMPy_doc_mpz_function_num_digits },
+    { "num_digits", (PyCFunction)GMPy_MPZ_Function_NumDigits, METH_FASTCALL, GMPy_doc_mpz_function_num_digits },
     { "pack", GMPy_MPZ_pack, METH_VARARGS, doc_pack },
     { "popcount", GMPy_MPZ_popcount, METH_O, doc_popcount },
     { "powmod", GMPy_Integer_PowMod, METH_VARARGS, GMPy_doc_integer_powmod },
+    { "powmod_base_list", GMPy_Integer_PowMod_Base_List, METH_VARARGS, GMPy_doc_integer_powmod_base_list },
+    { "powmod_exp_list", GMPy_Integer_PowMod_Exp_List, METH_VARARGS, GMPy_doc_integer_powmod_exp_list },
+    { "powmod_sec", GMPy_Integer_PowMod_Sec, METH_VARARGS, GMPy_doc_integer_powmod_sec },
     { "primorial", GMPy_MPZ_Function_Primorial, METH_O, GMPy_doc_mpz_function_primorial },
     { "qdiv", GMPy_MPQ_Function_Qdiv, METH_VARARGS, GMPy_doc_function_qdiv },
-    { "remove", GMPy_MPZ_Function_Remove, METH_VARARGS, GMPy_doc_mpz_function_remove },
+    { "remove", (PyCFunction)GMPy_MPZ_Function_Remove, METH_FASTCALL, GMPy_doc_mpz_function_remove },
     { "random_state", GMPy_RandomState_Factory, METH_VARARGS, GMPy_doc_random_state_factory },
-    { "set_cache", GMPy_set_cache, METH_VARARGS, GMPy_doc_set_cache },
     { "sign", GMPy_Context_Sign, METH_O, GMPy_doc_function_sign },
     { "square", GMPy_Context_Square, METH_O, GMPy_doc_function_square },
     { "sub", GMPy_Context_Sub, METH_VARARGS, GMPy_doc_sub },
@@ -730,8 +387,8 @@ static PyMethodDef Pygmpy_methods [] =
     { "unpack", GMPy_MPZ_unpack, METH_VARARGS, doc_unpack },
     { "version", GMPy_get_version, METH_NOARGS, GMPy_doc_version },
     { "xbit_mask", GMPy_XMPZ_Function_XbitMask, METH_O, GMPy_doc_xmpz_function_xbit_mask },
-    { "_mpmath_normalize", Pympz_mpmath_normalize, METH_VARARGS, doc_mpmath_normalizeg },
-    { "_mpmath_create", Pympz_mpmath_create, METH_VARARGS, doc_mpmath_createg },
+    { "_mpmath_normalize", (PyCFunction)Pympz_mpmath_normalize_fast, METH_FASTCALL, doc_mpmath_normalizeg },
+    { "_mpmath_create", (PyCFunction)Pympz_mpmath_create_fast, METH_FASTCALL, doc_mpmath_create },
 
     { "acos", GMPy_Context_Acos, METH_O, GMPy_doc_function_acos },
     { "acosh", GMPy_Context_Acosh, METH_O, GMPy_doc_function_acosh },
@@ -750,7 +407,6 @@ static PyMethodDef Pygmpy_methods [] =
     { "const_euler", (PyCFunction)GMPy_Function_Const_Euler, METH_VARARGS | METH_KEYWORDS, GMPy_doc_function_const_euler },
     { "const_log2", (PyCFunction)GMPy_Function_Const_Log2, METH_VARARGS | METH_KEYWORDS, GMPy_doc_function_const_log2 },
     { "const_pi", (PyCFunction)GMPy_Function_Const_Pi, METH_VARARGS | METH_KEYWORDS, GMPy_doc_function_const_pi },
-    { "context", (PyCFunction)GMPy_CTXT_Context, METH_VARARGS | METH_KEYWORDS, GMPy_doc_context },
     { "copy_sign", GMPy_MPFR_copy_sign, METH_VARARGS, GMPy_doc_mpfr_copy_sign },
     { "cos", GMPy_Context_Cos, METH_O, GMPy_doc_function_cos },
     { "cosh", GMPy_Context_Cosh, METH_O, GMPy_doc_function_cosh },
@@ -773,16 +429,15 @@ static PyMethodDef Pygmpy_methods [] =
     { "floor", GMPy_Context_Floor, METH_O, GMPy_doc_function_floor },
     { "fma", GMPy_Context_FMA, METH_VARARGS, GMPy_doc_function_fma },
     { "fms", GMPy_Context_FMS, METH_VARARGS, GMPy_doc_function_fms },
-#if MPFR_VERSION_MAJOR > 3
     { "fmma", GMPy_Context_FMMA, METH_VARARGS, GMPy_doc_function_fmma },
     { "fmms", GMPy_Context_FMMS, METH_VARARGS, GMPy_doc_function_fmms },
-#endif
     { "fmod", GMPy_Context_Fmod, METH_VARARGS, GMPy_doc_function_fmod },
     { "frac", GMPy_Context_Frac, METH_O, GMPy_doc_function_frac },
     { "free_cache", GMPy_MPFR_Free_Cache, METH_NOARGS, GMPy_doc_mpfr_free_cache },
     { "frexp", GMPy_Context_Frexp, METH_O, GMPy_doc_function_frexp },
     { "fsum", GMPy_Context_Fsum, METH_O, GMPy_doc_function_fsum },
     { "gamma", GMPy_Context_Gamma, METH_O, GMPy_doc_function_gamma },
+    { "gamma_inc", GMPy_Context_Gamma_Inc, METH_VARARGS, GMPy_doc_function_gamma_inc },
     { "get_context", GMPy_CTXT_Get, METH_NOARGS, GMPy_doc_get_context },
     { "get_emax_max", GMPy_MPFR_get_emax_max, METH_NOARGS, GMPy_doc_mpfr_get_emax_max },
     { "get_emin_min", GMPy_MPFR_get_emin_min, METH_NOARGS, GMPy_doc_mpfr_get_emin_min },
@@ -817,9 +472,7 @@ static PyMethodDef Pygmpy_methods [] =
     { "mpfr_from_old_binary", GMPy_MPFR_From_Old_Binary, METH_O, doc_mpfr_from_old_binary },
     { "mpfr_random", GMPy_MPFR_random_Function, METH_VARARGS, GMPy_doc_mpfr_random_function },
     { "mpfr_grandom", GMPy_MPFR_grandom_Function, METH_VARARGS, GMPy_doc_mpfr_grandom_function },
-#if MPFR_VERSION_MAJOR > 3
     { "mpfr_nrandom", GMPy_MPFR_nrandom_Function, METH_VARARGS, GMPy_doc_mpfr_nrandom_function },
-#endif
     { "mul_2exp", GMPy_Context_Mul_2exp, METH_VARARGS, GMPy_doc_function_mul_2exp },
     { "nan", GMPy_MPFR_set_nan, METH_NOARGS, GMPy_doc_mpfr_set_nan },
     { "next_above", GMPy_Context_NextAbove, METH_O, GMPy_doc_function_next_above },
@@ -867,15 +520,13 @@ static PyMethodDef Pygmpy_methods [] =
     { "polar", GMPy_Context_Polar, METH_O, GMPy_doc_function_polar },
     { "phase", GMPy_Context_Phase, METH_O, GMPy_doc_function_phase },
     { "proj", GMPy_Context_Proj, METH_O, GMPy_doc_function_proj },
-#ifdef MPC_110
     { "root_of_unity", GMPy_Context_Root_Of_Unity, METH_VARARGS, GMPy_doc_function_root_of_unity },
-#endif
     { "rect", GMPy_Context_Rect, METH_VARARGS, GMPy_doc_function_rect },
     { NULL, NULL, 1}
 };
 
 static char _gmpy_docs[] =
-"gmpy2 2.1.0b5 - General Multiple-precision arithmetic for Python\n"
+"gmpy2 2.2.0 - General Multiple-precision arithmetic for Python\n"
 "\n"
 "gmpy2 supports several multiple-precision libraries. Integer and\n"
 "rational arithmetic is provided by the GMP library. Real floating-\n"
@@ -904,8 +555,6 @@ static char _gmpy_docs[] =
  * implemented. No per-module state has been defined.
  */
 
-#ifdef PY3
-#define INITERROR return NULL
 static struct PyModuleDef moduledef = {
         PyModuleDef_HEAD_INIT,
         "gmpy2",
@@ -917,15 +566,8 @@ static struct PyModuleDef moduledef = {
         NULL, /* gmpy_clear */
         NULL
 };
-#else
-#define INITERROR return
-#endif
 
-#ifdef PY3
 PyMODINIT_FUNC PyInit_gmpy2(void)
-#else
-PyMODINIT_FUNC initgmpy2(void)
-#endif
 {
     PyObject *result = NULL;
     PyObject *namespace = NULL;
@@ -944,182 +586,140 @@ PyMODINIT_FUNC initgmpy2(void)
 
     /* Validate the sizes of the various typedef'ed integer types. */
 
-#if defined _WIN64 && MPIR
-    if (sizeof(mp_bitcnt_t) != sizeof(PY_LONG_LONG)) {
-        /* LCOV_EXCL_START */
-        SYSTEM_ERROR("Size of PY_LONG_LONG and mp_bitcnt_t not compatible (_WIN64 && MPIR)");
-        INITERROR;
-        /* LCOV_EXCL_STOP */
-    }
-#else
-    if (sizeof(mp_bitcnt_t) != sizeof(long)) {
-        /* LCOV_EXCL_START */
-        SYSTEM_ERROR("Size of long and mp_bitcnt_t not compatible");
-        INITERROR;
-        /* LCOV_EXCL_STOP */
-    }
-#endif
-
-    if (sizeof(mp_bitcnt_t) > sizeof(size_t)) {
-        /* LCOV_EXCL_START */
-        SYSTEM_ERROR("Size of size_t and mp_bitcnt_t not compatible");
-        INITERROR;
-        /* LCOV_EXCL_STOP */
-    }
-
     if (sizeof(mpfr_prec_t) != sizeof(long)) {
         /* LCOV_EXCL_START */
         SYSTEM_ERROR("Size of mpfr_prec_t and long not compatible");
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
 
     if (sizeof(mpfr_exp_t) != sizeof(long)) {
         /* LCOV_EXCL_START */
         SYSTEM_ERROR("Size of mpfr_exp_t and long not compatible");
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
-
-    /* Configure MPFR to use the maximum possible exponent range. */
-    mpfr_set_emax(mpfr_get_emax_max());
-    mpfr_set_emin(mpfr_get_emin_min());
 
     /* Initialize the types. */
     if (PyType_Ready(&MPZ_Type) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyType_Ready(&MPQ_Type) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyType_Ready(&XMPZ_Type) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyType_Ready(&GMPy_Iter_Type) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyType_Ready(&MPFR_Type) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyType_Ready(&CTXT_Type) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
-        /* LCOV_EXCL_STOP */
-    }
-    if (PyType_Ready(&CTXT_Manager_Type) < 0) {
-        /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyType_Ready(&MPC_Type) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyType_Ready(&RandomState_Type) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
-
-    /* Initialize the global structure. Eventually this should be module local. */
-    global.cache_size = 100;
-    global.cache_obsize = 128;
-    mpz_init(global.tempz);
-
-    /* Initialize object caching. */
-    set_gmpympzcache();
-    set_gmpympqcache();
-    set_gmpyxmpzcache();
-    set_gmpympfrcache();
-    set_gmpympccache();
 
     /* Initialize exceptions. */
     GMPyExc_GmpyError = PyErr_NewException("gmpy2.gmpy2Error", PyExc_ArithmeticError, NULL);
     if (!GMPyExc_GmpyError) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
 
     GMPyExc_Erange = PyErr_NewException("gmpy2.RangeError", GMPyExc_GmpyError, NULL);
     if (!GMPyExc_Erange) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
 
     GMPyExc_Inexact = PyErr_NewException("gmpy2.InexactResultError", GMPyExc_GmpyError, NULL);
     if (!GMPyExc_Inexact) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
 
     GMPyExc_Overflow = PyErr_NewException("gmpy2.OverflowResultError", GMPyExc_Inexact, NULL);
     if (!GMPyExc_Overflow) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
 
     GMPyExc_Underflow = PyErr_NewException("gmpy2.UnderflowResultError", GMPyExc_Inexact, NULL);
     if (!GMPyExc_Underflow) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
 
     temp = PyTuple_Pack(2, GMPyExc_GmpyError, PyExc_ValueError);
     if (!temp) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     GMPyExc_Invalid = PyErr_NewException("gmpy2.InvalidOperationError", temp, NULL);
     Py_DECREF(temp);
     if (!GMPyExc_Invalid) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
 
     temp = PyTuple_Pack(2, GMPyExc_GmpyError, PyExc_ZeroDivisionError);
     if (!temp) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     GMPyExc_DivZero = PyErr_NewException("gmpy2.DivisionByZeroError", temp, NULL);
     Py_DECREF(temp);
     if (!GMPyExc_DivZero) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
 
 
-#ifdef PY3
     gmpy_module = PyModule_Create(&moduledef);
-#else
-    gmpy_module = Py_InitModule3("gmpy2", Pygmpy_methods, _gmpy_docs);
-#endif
 
     if (gmpy_module == NULL) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
+
+
+    /* Add the context type to the module namespace. */
+
+    Py_INCREF(&CTXT_Type);
+    PyModule_AddObject(gmpy_module, "context", (PyObject*)&CTXT_Type);
 
     /* Add the mpz type to the module namespace. */
 
@@ -1132,7 +732,7 @@ PyMODINIT_FUNC initgmpy2(void)
     PyModule_AddObject(gmpy_module, "xmpz", (PyObject*)&XMPZ_Type);
 
     xmpz = XMPZ_Type.tp_dict;
-    limb_size = PyIntOrLong_FromSize_t(sizeof(mp_limb_t));
+    limb_size = PyLong_FromSize_t(sizeof(mp_limb_t));
     PyDict_SetItemString(xmpz, "limb_size", limb_size);
     Py_DECREF(limb_size);
 
@@ -1151,61 +751,45 @@ PyMODINIT_FUNC initgmpy2(void)
     Py_INCREF(&MPC_Type);
     PyModule_AddObject(gmpy_module, "mpc", (PyObject*)&MPC_Type);
 
-    /* Initialize thread local contexts. */
-#ifdef WITHOUT_THREADS
-    module_context = (CTXT_Object*)GMPy_CTXT_New();
-    if (!module_context) {
-        /* LCOV_EXCL_START */
-        INITERROR;
-        /* LCOV_EXCL_STOP */
+    /* Initialize context var. */
+    if (!(current_context_var = PyContextVar_New("gmpy2_context", NULL))) {
+        return NULL;
     }
-    Py_INCREF(Py_False);
-    if (PyModule_AddObject(gmpy_module, "HAVE_THREADS", Py_False) < 0) {
-        /* LCOV_EXCL_START */
-        Py_DECREF(Py_False);
-        INITERROR;
-        /* LCOV_EXCL_STOP */
-    }
-#else
-    tls_context_key = PyUnicode_FromString("__GMPY2_CTX__");
-    Py_INCREF(Py_True);
-    if (PyModule_AddObject(gmpy_module, "HAVE_THREADS", Py_True) < 0) {
-        /* LCOV_EXCL_START */
-        Py_DECREF(Py_True);
-        INITERROR;
-        /* LCOV_EXCL_STOP */
-    }
-#endif
 
     /* Add the constants for defining rounding modes. */
     if (PyModule_AddIntConstant(gmpy_module, "RoundToNearest", MPFR_RNDN) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyModule_AddIntConstant(gmpy_module, "RoundToZero", MPFR_RNDZ) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyModule_AddIntConstant(gmpy_module, "RoundUp", MPFR_RNDU) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyModule_AddIntConstant(gmpy_module, "RoundDown", MPFR_RNDD) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyModule_AddIntConstant(gmpy_module, "RoundAwayZero", MPFR_RNDA) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     if (PyModule_AddIntConstant(gmpy_module, "Default", GMPY_DEFAULT) < 0) {
         /* LCOV_EXCL_START */
-        INITERROR;
+        return NULL;;
+        /* LCOV_EXCL_STOP */
+    }
+    if (PyModule_AddStringConstant(gmpy_module, "__version__", gmpy_version) < 0) {
+        /* LCOV_EXCL_START */
+        return NULL;
         /* LCOV_EXCL_STOP */
     }
 
@@ -1214,42 +798,42 @@ PyMODINIT_FUNC initgmpy2(void)
     if (PyModule_AddObject(gmpy_module, "DivisionByZeroError", GMPyExc_DivZero) < 0) {
         /* LCOV_EXCL_START */
         Py_DECREF(GMPyExc_DivZero);
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     Py_INCREF(GMPyExc_Inexact);
     if (PyModule_AddObject(gmpy_module, "InexactResultError", GMPyExc_Inexact) < 0) {
         /* LCOV_EXCL_START */
         Py_DECREF(GMPyExc_Inexact);
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     Py_INCREF(GMPyExc_Invalid);
     if (PyModule_AddObject(gmpy_module, "InvalidOperationError", GMPyExc_Invalid) < 0 ) {
         /* LCOV_EXCL_START */
         Py_DECREF(GMPyExc_Invalid);
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     Py_INCREF(GMPyExc_Overflow);
     if (PyModule_AddObject(gmpy_module, "OverflowResultError", GMPyExc_Overflow) < 0) {
         /* LCOV_EXCL_START */
         Py_DECREF(GMPyExc_Overflow);
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     Py_INCREF(GMPyExc_Underflow);
     if (PyModule_AddObject(gmpy_module, "UnderflowResultError", GMPyExc_Underflow) < 0) {
         /* LCOV_EXCL_START */
         Py_DECREF(GMPyExc_Underflow);
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
     Py_INCREF(GMPyExc_Erange);
     if (PyModule_AddObject(gmpy_module, "RangeError", GMPyExc_Erange) < 0) {
         /* LCOV_EXCL_START */
         Py_DECREF(GMPyExc_Erange);
-        INITERROR;
+        return NULL;;
         /* LCOV_EXCL_STOP */
     }
 
@@ -1265,7 +849,6 @@ PyMODINIT_FUNC initgmpy2(void)
     GMPy_C_API[MPC_Type_NUM] = (void*)&MPC_Type;
     GMPy_C_API[XMPC_Type_NUM] = (void*)&MPC_Type;
     GMPy_C_API[CTXT_Type_NUM] = (void*)&CTXT_Type;
-    GMPy_C_API[CTXT_Manager_Type_NUM] = (void*)&CTXT_Manager_Type;
     GMPy_C_API[RandomState_Type_NUM] = (void*)&RandomState_Type;
 
     GMPy_C_API[GMPy_MPZ_New_NUM] = (void*)GMPy_MPZ_New;
@@ -1300,23 +883,21 @@ PyMODINIT_FUNC initgmpy2(void)
 #endif
 
     /* Add support for pickling. */
-#ifdef PY3
     copy_reg_module = PyImport_ImportModule("copyreg");
     if (copy_reg_module) {
         char* enable_pickle =
             "def gmpy2_reducer(x): return (gmpy2.from_binary, (gmpy2.to_binary(x),))\n"
-            "copyreg.pickle(type(gmpy2.mpz(0)), gmpy2_reducer)\n"
-            "copyreg.pickle(type(gmpy2.xmpz(0)), gmpy2_reducer)\n"
-            "copyreg.pickle(type(gmpy2.mpq(0)), gmpy2_reducer)\n"
-            "copyreg.pickle(type(gmpy2.mpfr(0)), gmpy2_reducer)\n"
-            "copyreg.pickle(type(gmpy2.mpc(0,0)), gmpy2_reducer)\n";
+            "copyreg.pickle(gmpy2.mpz, gmpy2_reducer)\n"
+            "copyreg.pickle(gmpy2.xmpz, gmpy2_reducer)\n"
+            "copyreg.pickle(gmpy2.mpq, gmpy2_reducer)\n"
+            "copyreg.pickle(gmpy2.mpfr, gmpy2_reducer)\n"
+            "copyreg.pickle(gmpy2.mpc, gmpy2_reducer)\n";
 
         namespace = PyDict_New();
         result = NULL;
 
         PyDict_SetItemString(namespace, "copyreg", copy_reg_module);
         PyDict_SetItemString(namespace, "gmpy2", gmpy_module);
-        PyDict_SetItemString(namespace, "type", (PyObject*)&PyType_Type);
         result = PyRun_String(enable_pickle, Py_file_input, namespace, namespace);
         if (!result) {
             /* LCOV_EXCL_START */
@@ -1332,60 +913,28 @@ PyMODINIT_FUNC initgmpy2(void)
         PyErr_Clear();
         /* LCOV_EXCL_STOP */
     }
-#else
-    copy_reg_module = PyImport_ImportModule("copy_reg");
-    if (copy_reg_module) {
-        char* enable_pickle =
-            "def gmpy2_reducer(x): return (gmpy2.from_binary, (gmpy2.to_binary(x),))\n"
-            "copy_reg.pickle(type(gmpy2.mpz(0)), gmpy2_reducer)\n"
-            "copy_reg.pickle(type(gmpy2.xmpz(0)), gmpy2_reducer)\n"
-            "copy_reg.pickle(type(gmpy2.mpq(0)), gmpy2_reducer)\n"
-            "copy_reg.pickle(type(gmpy2.mpfr(0)), gmpy2_reducer)\n"
-            "copy_reg.pickle(type(gmpy2.mpc(0,0)), gmpy2_reducer)\n";
-
-        PyObject* namespace = PyDict_New();
-        PyObject* result = NULL;
-
-        PyDict_SetItemString(namespace, "copy_reg", copy_reg_module);
-        PyDict_SetItemString(namespace, "gmpy2", gmpy_module);
-        PyDict_SetItemString(namespace, "type", (PyObject*)&PyType_Type);
-        result = PyRun_String(enable_pickle, Py_file_input, namespace, namespace);
-        if (!result) {
-            /* LCOV_EXCL_START */
-            PyErr_Clear();
-            /* LCOV_EXCL_STOP */
-        }
-        Py_DECREF(namespace);
-        Py_DECREF(copy_reg_module);
-        Py_XDECREF(result);
-    }
-    else {
-        /* LCOV_EXCL_START */
-        PyErr_Clear();
-        /* LCOV_EXCL_STOP */
-    }
-#endif
 
     /* Register the gmpy2 types with the numeric tower. */
 
     numbers_module = PyImport_ImportModule("numbers");
     if (numbers_module) {
         char* register_numbers =
-            "numbers.Integral.register(type(gmpy2.mpz()))\n"
-            "numbers.Rational.register(type(gmpy2.mpq()))\n"
-            "numbers.Real.register(type(gmpy2.mpfr()))\n"
-            "numbers.Complex.register(type(gmpy2.mpc()))\n"
+            "numbers.Integral.register(gmpy2.mpz)\n"
+            "numbers.Rational.register(gmpy2.mpq)\n"
+            "numbers.Real.register(gmpy2.mpfr)\n"
+            "numbers.Complex.register(gmpy2.mpc)\n"
         ;
         namespace = PyDict_New();
         result = NULL;
 
         PyDict_SetItemString(namespace, "numbers", numbers_module);
         PyDict_SetItemString(namespace, "gmpy2", gmpy_module);
-        PyDict_SetItemString(namespace, "type", (PyObject*)&PyType_Type);
         result = PyRun_String(register_numbers, Py_file_input,
                               namespace, namespace);
         if (!result) {
+            /* LCOV_EXCL_START */
             PyErr_Clear();
+            /* LCOV_EXCL_STOP */
         }
 
         Py_DECREF(namespace);
@@ -1393,10 +942,10 @@ PyMODINIT_FUNC initgmpy2(void)
         Py_XDECREF(result);
     }
     else {
+        /* LCOV_EXCL_START */
         PyErr_Clear();
+        /* LCOV_EXCL_STOP */
     }
 
-#ifdef PY3
     return gmpy_module;
-#endif
 }

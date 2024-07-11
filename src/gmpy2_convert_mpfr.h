@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_convert_mpfr.h                                                    *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -38,26 +36,21 @@ extern "C" {
 /* Conversions with Pympfr */
 
 static MPFR_Object *    GMPy_MPFR_From_MPFR(MPFR_Object *obj, mpfr_prec_t prec, CTXT_Object *context);
-static MPFR_Object *    GMPy_MPFR_From_PyIntOrLong(PyObject *obj, mpfr_prec_t prec, CTXT_Object *context);
+static MPFR_Object *    GMPy_MPFR_From_PyLong(PyObject *obj, mpfr_prec_t prec, CTXT_Object *context);
 static MPFR_Object *    GMPy_MPFR_From_PyFloat(PyObject *obj, mpfr_prec_t prec, CTXT_Object *context);
 static MPFR_Object *    GMPy_MPFR_From_MPZ(MPZ_Object *obj, mpfr_prec_t prec, CTXT_Object *context);
 static MPFR_Object *    GMPy_MPFR_From_MPQ(MPQ_Object *obj, mpfr_prec_t prec, CTXT_Object *context);
 static MPFR_Object *    GMPy_MPFR_From_Fraction(PyObject *obj, mpfr_prec_t prec, CTXT_Object *context);
 static MPFR_Object *    GMPy_MPFR_From_PyStr(PyObject *s, int base, mpfr_prec_t prec, CTXT_Object *context);
 static MPFR_Object *    GMPy_MPFR_From_Real(PyObject* obj, mpfr_prec_t prec, CTXT_Object *context);
-static MPFR_Object *    GMPy_MPFR_From_RealAndCopy(PyObject* obj, mpfr_prec_t prec, CTXT_Object *context);
+static MPFR_Object *    GMPy_MPFR_From_RealWithTypeAndCopy(PyObject* obj, int xtype, mpfr_prec_t prec, CTXT_Object *context);
 
-static PyObject *       GMPy_PyIntOrLong_From_MPFR(MPFR_Object *obj, CTXT_Object *context);
+static PyObject *       GMPy_PyLong_From_MPFR(MPFR_Object *obj, CTXT_Object *context);
 static MPZ_Object *     GMPy_MPZ_From_MPFR(MPFR_Object *obj, CTXT_Object *context);
 static XMPZ_Object *    GMPy_XMPZ_From_MPFR(MPFR_Object *self, CTXT_Object *context);
 static MPQ_Object  *    GMPy_MPQ_From_MPFR(MPFR_Object *self, CTXT_Object *context);
 static PyObject *       GMPy_PyFloat_From_MPFR(MPFR_Object *self, CTXT_Object *context);
 static PyObject *       GMPy_PyStr_From_MPFR(MPFR_Object *self, int base, int digits, CTXT_Object *context);
-
-#ifdef PY2
-static PyObject *       GMPy_PyLong_From_MPFR(MPFR_Object *obj, CTXT_Object *context);
-static PyObject *       GMPy_MPFR_Long_Slot(MPFR_Object *self);
-#endif
 
 static PyObject *       GMPy_MPFR_Str_Slot(MPFR_Object *self);
 static PyObject *       GMPy_MPFR_Repr_Slot(MPFR_Object *self);

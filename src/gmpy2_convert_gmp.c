@@ -1,16 +1,13 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_convert_gmp.c                                                     *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
- * This file is part of GMPY2.                                             *
  *                                                                         *
  * GMPY2 is free software: you can redistribute it and/or modify it under  *
  * the terms of the GNU Lesser General Public License as published by the  *
@@ -41,15 +38,40 @@
  * Conversion between native Python objects and MPZ.                        *
  * ======================================================================== */
 
-static MPZ_Object *
-GMPy_MPZ_From_PyIntOrLong(PyObject *obj, CTXT_Object *context)
+/* To support creation of temporary mpz objects. */
+static void
+mpz_set_PyLong(mpz_t z, PyObject *obj)
 {
-    MPZ_Object *result;
     int negative;
     Py_ssize_t len;
     PyLongObject *templong = (PyLongObject*)obj;
 
-    assert(PyIntOrLong_Check(obj));
+    len = _PyLong_DigitCount(obj);
+    negative = _PyLong_Sign(obj) < 0;
+
+    switch (len) {
+    case 1:
+        mpz_set_si(z, (sdigit)GET_OB_DIGIT(templong)[0]);
+        break;
+    case 0:
+        mpz_set_si(z, 0);
+        break;
+    default:
+        mpz_import(z, len, -1, sizeof(digit), 0,
+                   sizeof(digit)*8 - PyLong_SHIFT,
+                   GET_OB_DIGIT(templong));
+    }
+
+    if (negative) {
+        mpz_neg(z, z);
+    }
+    return;
+}
+
+static MPZ_Object *
+GMPy_MPZ_From_PyLong(PyObject *obj, CTXT_Object *context)
+{
+    MPZ_Object *result;
 
     if(!(result = GMPy_MPZ_New(context))) {
         /* LCOV_EXCL_START */
@@ -57,88 +79,9 @@ GMPy_MPZ_From_PyIntOrLong(PyObject *obj, CTXT_Object *context)
         /* LCOV_EXCL_STOP */
     }
 
-#ifdef PY2
-    if (PyInt_Check(obj)) {
-        mpz_set_si(result->z, PyInt_AS_LONG(obj));
-        return result;
-    }
-#endif
+    mpz_set_PyLong(MPZ(result), obj);
 
-    switch (Py_SIZE(templong)) {
-    case -1:
-        mpz_set_si(result->z, -(sdigit)templong->ob_digit[0]);
-        break;
-    case 0:
-        mpz_set_si(result->z, 0);
-        break;
-    case 1:
-        mpz_set_si(result->z, templong->ob_digit[0]);
-        break;
-    default:
-        mpz_set_si(result->z, 0);
-
-        if (Py_SIZE(templong) < 0) {
-            len = - Py_SIZE(templong);
-            negative = 1;
-        } else {
-            len = Py_SIZE(templong);
-            negative = 0;
-        }
-
-        mpz_import(result->z, len, -1, sizeof(templong->ob_digit[0]), 0,
-                   sizeof(templong->ob_digit[0])*8 - PyLong_SHIFT, templong->ob_digit);
-
-        if (negative) {
-            mpz_neg(result->z, result->z);
-        }
-    }
     return result;
-}
-
-/* To support creation of temporary mpz objects. */
-static void
-mpz_set_PyIntOrLong(mpz_t z, PyObject *obj)
-{
-    int negative;
-    Py_ssize_t len;
-    PyLongObject *templong = (PyLongObject*)obj;
-
-#ifdef PY2
-    if (PyInt_Check(obj)) {
-        mpz_set_si(z, PyInt_AS_LONG(obj));
-        return;
-    }
-#endif
-
-    switch (Py_SIZE(templong)) {
-    case -1:
-        mpz_set_si(z, -(sdigit)templong->ob_digit[0]);
-        break;
-    case 0:
-        mpz_set_si(z, 0);
-        break;
-    case 1:
-        mpz_set_si(z, templong->ob_digit[0]);
-        break;
-    default:
-        mpz_set_si(z, 0);
-
-        if (Py_SIZE(templong) < 0) {
-            len = - Py_SIZE(templong);
-            negative = 1;
-        } else {
-            len = Py_SIZE(templong);
-            negative = 0;
-        }
-
-        mpz_import(z, len, -1, sizeof(templong->ob_digit[0]), 0,
-                   sizeof(templong->ob_digit[0])*8 - PyLong_SHIFT, templong->ob_digit);
-
-        if (negative) {
-            mpz_neg(z, z);
-        }
-    }
-    return;
 }
 
 static MPZ_Object *
@@ -164,17 +107,15 @@ GMPy_MPZ_From_PyFloat(PyObject *obj, CTXT_Object *context)
 {
     MPZ_Object *result;
 
-    assert(PyFloat_Check(obj));
-
     if ((result = GMPy_MPZ_New(context))) {
         double d = PyFloat_AsDouble(obj);
 
-        if (Py_IS_NAN(d)) {
+        if (isnan(d)) {
             Py_DECREF((PyObject*)result);
             VALUE_ERROR("'mpz' does not support NaN");
             return NULL;
         }
-        if (Py_IS_INFINITY(d)) {
+        if (isinf(d)) {
             Py_DECREF((PyObject*)result);
             OVERFLOW_ERROR("'mpz' does not support Infinity");
             return NULL;
@@ -187,22 +128,15 @@ GMPy_MPZ_From_PyFloat(PyObject *obj, CTXT_Object *context)
 static PyObject *
 GMPy_PyLong_From_MPZ(MPZ_Object *obj, CTXT_Object *context)
 {
-    int negative;
-    size_t count, size;
-    PyLongObject *result;
-
-    assert(CHECK_MPZANY(obj));
-
-    /* Assume gmp uses limbs as least as large as the builtin longs do */
-    assert(mp_bits_per_limb >= PyLong_SHIFT);
-
-    if (mpz_sgn(obj->z) < 0) {
-        negative = 1;
-    } else {
-        negative = 0;
+    if (mpz_fits_slong_p(obj->z)) {
+        return PyLong_FromLong(mpz_get_si(obj->z));
     }
 
-    size = (mpz_sizeinbase(obj->z, 2) + PyLong_SHIFT - 1) / PyLong_SHIFT;
+    /* Assume gmp uses limbs as least as large as the builtin longs do */
+
+    size_t count, size = (mpz_sizeinbase(obj->z, 2) +
+                          PyLong_SHIFT - 1) / PyLong_SHIFT;
+    PyLongObject *result;
 
     if (!(result = _PyLong_New(size))) {
         /* LCOV_EXCL_START */
@@ -210,59 +144,21 @@ GMPy_PyLong_From_MPZ(MPZ_Object *obj, CTXT_Object *context)
         /* LCOV_EXCL_STOP */
     }
 
-    mpz_export(result->ob_digit, &count, -1, sizeof(result->ob_digit[0]), 0,
-               sizeof(result->ob_digit[0])*8 - PyLong_SHIFT, obj->z);
+    mpz_export(GET_OB_DIGIT(result), &count, -1, sizeof(digit), 0,
+               sizeof(digit)*8 - PyLong_SHIFT, obj->z);
 
-    if (count == 0) {
-        result->ob_digit[0] = 0;
+    for (size_t i = count; i < size; i++) {
+        GET_OB_DIGIT(result)[i] = 0;
     }
+    _PyLong_SetSignAndDigitCount(result, mpz_sgn(obj->z) < 0, count);
 
-    /* long_normalize() is file-static so we must reimplement it */
-    /* longobjp = long_normalize(longobjp); */
-    while ((size>0) && (result->ob_digit[size-1] == 0)) {
-        size--;
-    }
-    Py_SIZE(result) = size;
-
-    if (negative) {
-        Py_SIZE(result) = - Py_SIZE(result);
-    }
     return (PyObject*)result;
-}
-
-#ifdef PY2
-static PyObject *
-GMPy_MPZ_Long_Slot(MPZ_Object *self)
-{
-    return GMPy_PyLong_From_MPZ(self, NULL);
-}
-#endif
-
-/* The PyIntOrLong functions should be used when converting a number back
- * to a Python value since is automatically returns an "int" or "long" when
- * using Python 2.x. The PyLong_From functions (above) should only be used
- * when a PyLong is specifically needed for Python 2.x.
- */
-
-static PyObject *
-GMPy_PyIntOrLong_From_MPZ(MPZ_Object *obj, CTXT_Object *context)
-{
-    assert(CHECK_MPZANY(obj));
-
-#ifdef PY2
-    if (mpz_fits_slong_p(obj->z)) {
-        /* cast is safe since we know it fits in a signed long */
-        return PyInt_FromLong((long)mpz_get_si(obj->z));
-    }
-#endif
-
-    return GMPy_PyLong_From_MPZ(obj, context);
 }
 
 static PyObject *
 GMPy_MPZ_Int_Slot(MPZ_Object *self)
 {
-    return GMPy_PyIntOrLong_From_MPZ(self, NULL);
+    return GMPy_PyLong_From_MPZ(self, NULL);
 }
 
 static PyObject *
@@ -270,11 +166,9 @@ GMPy_PyFloat_From_MPZ(MPZ_Object *obj, CTXT_Object *context)
 {
     double res;
 
-    assert(CHECK_MPZANY(obj));
-
     res = mpz_get_d(obj->z);
 
-    if (Py_IS_INFINITY(res)) {
+    if (isinf(res)) {
         OVERFLOW_ERROR("'mpz' too large to convert to float");
         return NULL;
     }
@@ -291,8 +185,6 @@ GMPy_MPZ_Float_Slot(MPZ_Object *self)
 static PyObject *
 GMPy_PyStr_From_MPZ(MPZ_Object *obj, int base, int option, CTXT_Object *context)
 {
-    assert(CHECK_MPZANY(obj));
-
     return mpz_ascii(obj->z, base, option, 0);
 }
 
@@ -306,8 +198,8 @@ GMPy_MPZ_From_Integer(PyObject *obj, CTXT_Object *context)
         return (MPZ_Object*)obj;
     }
 
-    if (PyIntOrLong_Check(obj))
-        return GMPy_MPZ_From_PyIntOrLong(obj, context);
+    if (PyLong_Check(obj))
+        return GMPy_MPZ_From_PyLong(obj, context);
 
     if (XMPZ_Check(obj))
         return GMPy_MPZ_From_XMPZ((XMPZ_Object*)obj, context);
@@ -329,14 +221,83 @@ GMPy_MPZ_From_Integer(PyObject *obj, CTXT_Object *context)
     return NULL;
 }
 
-
-
 static MPZ_Object *
 GMPy_MPZ_From_IntegerAndCopy(PyObject *obj, CTXT_Object *context)
 {
+    MPZ_Object *result = NULL;
+
+    if (MPZ_Check(obj)) {
+        if (!(result = GMPy_MPZ_New(context))) {
+            /* LCOV_EXCL_START */
+            return NULL;
+            /* LCOV_EXCL_STOP */
+        }
+        mpz_set(result->z, MPZ(obj));
+        return result;
+    }
+
+    if (PyLong_Check(obj))
+        return GMPy_MPZ_From_PyLong(obj, context);
+
+    if (XMPZ_Check(obj))
+        return GMPy_MPZ_From_XMPZ((XMPZ_Object*)obj, context);
+
+    if (HAS_STRICT_MPZ_CONVERSION(obj)) {
+        result = (MPZ_Object *) PyObject_CallMethod(obj, "__mpz__", NULL);
+
+        if (result != NULL && MPZ_Check(result)) {
+            return result;
+        }
+        else {
+            Py_XDECREF((PyObject*)result);
+            goto error;
+        }
+    }
+
+  error:
+    TYPE_ERROR("cannot convert object to mpz");
+    return NULL;
+}
+
+static MPZ_Object *
+GMPy_MPZ_From_IntegerWithType(PyObject *obj, int xtype, CTXT_Object *context)
+{
+    MPZ_Object *result = NULL;
+
+    if (IS_TYPE_MPZ(xtype)) {
+        Py_INCREF(obj);
+        return (MPZ_Object*)obj;
+    }
+
+    if (IS_TYPE_PyInteger(xtype))
+        return GMPy_MPZ_From_PyLong(obj, context);
+
+    if (IS_TYPE_XMPZ(xtype))
+        return GMPy_MPZ_From_XMPZ((XMPZ_Object*)obj, context);
+
+    if (IS_TYPE_HAS_MPZ(xtype)) {
+        result = (MPZ_Object *) PyObject_CallMethod(obj, "__mpz__", NULL);
+
+        if (result != NULL && MPZ_Check(result)) {
+            return result;
+        }
+        else {
+            Py_XDECREF((PyObject*)result);
+            goto error;
+        }
+    }
+
+  error:
+    TYPE_ERROR("cannot convert object to mpz");
+    return NULL;
+}
+
+static MPZ_Object *
+GMPy_MPZ_From_IntegerWithTypeAndCopy(PyObject *obj, int xtype, CTXT_Object *context)
+{
     MPZ_Object *result = NULL, *temp = NULL;
 
-    result = GMPy_MPZ_From_Integer(obj, context);
+    result = GMPy_MPZ_From_IntegerWithType(obj, xtype, context);
 
     if (result == NULL)
         return result;
@@ -376,7 +337,7 @@ GMPy_MPZ_Repr_Slot(MPZ_Object *self)
 static int
 GMPy_MPZ_ConvertArg(PyObject *arg, PyObject **ptr)
 {
-    MPZ_Object *result = GMPy_MPZ_From_Integer(arg, NULL);
+    MPZ_Object *result = GMPy_MPZ_From_IntegerWithType(arg, GMPy_ObjectType(arg), NULL);
 
     if (result) {
         *ptr = (PyObject*)result;
@@ -394,14 +355,9 @@ GMPy_MPZ_ConvertArg(PyObject *arg, PyObject **ptr)
  * ======================================================================== */
 
 static XMPZ_Object *
-GMPy_XMPZ_From_PyIntOrLong(PyObject *obj, CTXT_Object *context)
+GMPy_XMPZ_From_PyLong(PyObject *obj, CTXT_Object *context)
 {
     XMPZ_Object *result;
-    int negative;
-    Py_ssize_t len;
-    PyLongObject *templong = (PyLongObject*)obj;
-
-    assert(PyIntOrLong_Check(obj));
 
     if(!(result = GMPy_XMPZ_New(context))) {
         /* LCOV_EXCL_START */
@@ -409,41 +365,8 @@ GMPy_XMPZ_From_PyIntOrLong(PyObject *obj, CTXT_Object *context)
         /* LCOV_EXCL_STOP */
     }
 
-#ifdef PY2
-    if (PyInt_Check(obj)) {
-        mpz_set_si(result->z, PyInt_AS_LONG(obj));
-        return result;
-    }
-#endif
+    mpz_set_PyLong(result->z, obj);
 
-    switch (Py_SIZE(templong)) {
-    case -1:
-        mpz_set_si(result->z, -(sdigit)templong->ob_digit[0]);
-        break;
-    case 0:
-        mpz_set_si(result->z, 0);
-        break;
-    case 1:
-        mpz_set_si(result->z, templong->ob_digit[0]);
-        break;
-    default:
-        mpz_set_si(result->z, 0);
-
-        if (Py_SIZE(templong) < 0) {
-            len = - Py_SIZE(templong);
-            negative = 1;
-        } else {
-            len = Py_SIZE(templong);
-            negative = 0;
-        }
-
-        mpz_import(result->z, len, -1, sizeof(templong->ob_digit[0]), 0,
-                   sizeof(templong->ob_digit[0])*8 - PyLong_SHIFT, templong->ob_digit);
-
-        if (negative) {
-            mpz_neg(result->z, result->z);
-        }
-    }
     return result;
 }
 
@@ -467,17 +390,15 @@ GMPy_XMPZ_From_PyFloat(PyObject *obj, CTXT_Object *context)
 {
     XMPZ_Object *result;
 
-    assert(PyFloat_Check(obj));
-
     if ((result = GMPy_XMPZ_New(context))) {
         double d = PyFloat_AsDouble(obj);
 
-        if (Py_IS_NAN(d)) {
+        if (isnan(d)) {
             Py_DECREF((PyObject*)result);
             VALUE_ERROR("'xmpz' does not support NaN");
             return NULL;
         }
-        if (Py_IS_INFINITY(d)) {
+        if (isinf(d)) {
             Py_DECREF((PyObject*)result);
             OVERFLOW_ERROR("'xmpz' does not support Infinity");
             return NULL;
@@ -492,8 +413,6 @@ GMPy_XMPZ_From_MPZ(MPZ_Object *obj, CTXT_Object *context)
 {
     XMPZ_Object *result;
 
-    assert(CHECK_MPZANY(obj));
-
     if ((result = GMPy_XMPZ_New(context)))
         mpz_set(result->z, obj->z);
 
@@ -505,8 +424,6 @@ GMPy_XMPZ_From_XMPZ(XMPZ_Object *obj, CTXT_Object *context)
 {
     XMPZ_Object *result;
 
-    assert(XMPZ_Check(obj));
-
     if ((result = GMPy_XMPZ_New(context)))
         mpz_set(result->z, obj->z);
 
@@ -516,8 +433,6 @@ GMPy_XMPZ_From_XMPZ(XMPZ_Object *obj, CTXT_Object *context)
 static PyObject *
 GMPy_PyStr_From_XMPZ(XMPZ_Object *obj, int base, int option, CTXT_Object *context)
 {
-    assert(XMPZ_Check(obj));
-
     return mpz_ascii(obj->z, base, option, 1);
 }
 
@@ -525,8 +440,6 @@ static MPZ_Object *
 GMPy_MPZ_From_XMPZ(XMPZ_Object *obj, CTXT_Object *context)
 {
     MPZ_Object *result;
-
-    assert(XMPZ_Check(obj));
 
     if ((result = GMPy_MPZ_New(context)))
         mpz_set(result->z, obj->z);
@@ -554,14 +467,12 @@ GMPy_XMPZ_Repr_Slot(XMPZ_Object *self)
  * ======================================================================== */
 
 static MPQ_Object *
-GMPy_MPQ_From_PyIntOrLong(PyObject *obj, CTXT_Object *context)
+GMPy_MPQ_From_PyLong(PyObject *obj, CTXT_Object *context)
 {
     MPQ_Object *result;
     MPZ_Object *temp;
 
-    assert(PyIntOrLong_Check(obj));
-
-    temp = GMPy_MPZ_From_PyIntOrLong(obj, context);
+    temp = GMPy_MPZ_From_PyLong(obj, context);
 
     if (!temp)
         return NULL;
@@ -579,9 +490,10 @@ GMPy_MPQ_From_PyStr(PyObject *s, int base, CTXT_Object *context)
     MPQ_Object *result;
     char *cp;
     char exp_char = 'E';
-    Py_ssize_t len, i;
-    PyObject *ascii_str = NULL;
     long expt = 0;
+    PyObject *ascii_str = ascii_str = GMPy_RemoveIgnoredASCII(s);
+
+    if (!ascii_str) return NULL;
 
     if (!(result = GMPy_MPQ_New(context))) {
         /* LCOV_EXCL_START */
@@ -589,31 +501,7 @@ GMPy_MPQ_From_PyStr(PyObject *s, int base, CTXT_Object *context)
         /* LCOV_EXCL_STOP */
     }
 
-    if (PyBytes_Check(s)) {
-        len = PyBytes_Size(s);
-        cp = PyBytes_AsString(s);
-    }
-    else if (PyUnicode_Check(s)) {
-        ascii_str = PyUnicode_AsASCIIString(s);
-        if (!ascii_str) {
-            VALUE_ERROR("string contains non-ASCII characters");
-            goto error;
-        }
-        len = PyBytes_Size(ascii_str);
-        cp = PyBytes_AsString(ascii_str);
-    }
-    else {
-        TYPE_ERROR("object is not string or Unicode");
-        goto error;
-    }
-
-    /* Don't allow NULL characters */
-    for (i = 0; i < len; i++) {
-        if (cp[i] == '\0') {
-            VALUE_ERROR("string contains NULL characters");
-            goto error;
-        }
-    }
+    cp = PyBytes_AsString(ascii_str);
 
     {
         char *whereslash = strchr((char*)cp, '/');
@@ -656,10 +544,10 @@ GMPy_MPQ_From_PyStr(PyObject *s, int base, CTXT_Object *context)
          */
 
         if (wheredot) {
-            char *counter;
+            unsigned char *counter;
             long digits = 0;
 
-            counter = wheredot;
+            counter = (unsigned char*)wheredot;
             digits = 0;
             *wheredot = ' ';
             while (*++counter != '\0') {
@@ -756,17 +644,15 @@ GMPy_MPQ_From_PyFloat(PyObject *obj, CTXT_Object *context)
 {
     MPQ_Object *result;
 
-    assert(PyFloat_Check(obj));
-
     if ((result = GMPy_MPQ_New(context))) {
         double d = PyFloat_AsDouble(obj);
 
-        if (Py_IS_NAN(d)) {
+        if (isnan(d)) {
             Py_DECREF((PyObject*)result);
             VALUE_ERROR("'mpq' does not support NaN");
             return NULL;
         }
-        if (Py_IS_INFINITY(d)) {
+        if (isinf(d)) {
             Py_DECREF((PyObject*)result);
             OVERFLOW_ERROR("'mpq' does not support Infinity");
             return NULL;
@@ -782,8 +668,6 @@ GMPy_MPQ_From_MPZ(MPZ_Object *obj, CTXT_Object *context)
 {
     MPQ_Object *result;
 
-    assert(CHECK_MPZANY(obj));
-
     if ((result = GMPy_MPQ_New(context)))
         mpq_set_z(result->q, obj->z);
 
@@ -794,8 +678,6 @@ static MPQ_Object *
 GMPy_MPQ_From_XMPZ(XMPZ_Object *obj, CTXT_Object *context)
 {
     MPQ_Object *result;
-
-    assert(XMPZ_Check(obj));
 
     if ((result = GMPy_MPQ_New(context)))
         mpq_set_z(result->q, obj->z);
@@ -808,8 +690,6 @@ GMPy_MPZ_From_MPQ(MPQ_Object *obj, CTXT_Object *context)
 {
     MPZ_Object *result;
 
-    assert(MPQ_Check(obj));
-
     if ((result = GMPy_MPZ_New(context)))
         mpz_set_q(result->z, obj->q);
 
@@ -821,22 +701,17 @@ GMPy_XMPZ_From_MPQ(MPQ_Object *obj, CTXT_Object *context)
 {
     XMPZ_Object *result;
 
-    assert(MPQ_Check(obj));
-
     if ((result = GMPy_XMPZ_New(context)))
-
         mpz_set_q(result->z, obj->q);
 
     return result;
 }
-#ifdef PY2
+
 static PyObject *
 GMPy_PyLong_From_MPQ(MPQ_Object *obj, CTXT_Object *context)
 {
     PyObject *result;
     MPZ_Object *temp;
-
-    assert(MPQ_Check(obj));
 
     temp = GMPy_MPZ_From_MPQ(obj, context);
 
@@ -853,38 +728,9 @@ GMPy_PyLong_From_MPQ(MPQ_Object *obj, CTXT_Object *context)
 }
 
 static PyObject *
-GMPy_MPQ_Long_Slot(MPQ_Object *self)
-{
-    return GMPy_PyLong_From_MPQ(self, NULL);
-}
-#endif
-
-static PyObject *
-GMPy_PyIntOrLong_From_MPQ(MPQ_Object *obj, CTXT_Object *context)
-{
-    PyObject *result;
-    MPZ_Object *temp;
-
-    assert(MPQ_Check(obj));
-
-    temp = GMPy_MPZ_From_MPQ(obj, context);
-
-    if (!temp) {
-        /* LCOV_EXCL_START */
-        return NULL;
-        /* LCOV_EXCL_STOP */
-    }
-
-    result = GMPy_PyIntOrLong_From_MPZ(temp, context);
-    Py_DECREF((PyObject*)temp);
-
-    return result;
-}
-
-static PyObject *
 GMPy_MPQ_Int_Slot(MPQ_Object *self)
 {
-    return GMPy_PyIntOrLong_From_MPQ(self, NULL);
+    return GMPy_PyLong_From_MPQ(self, NULL);
 }
 
 static char* _qtag = "mpq(";
@@ -923,21 +769,6 @@ GMPy_PyStr_From_MPQ(MPQ_Object *obj, int base, int option, CTXT_Object *context)
         p += strlen(p);
     }
 
-#ifdef PY2
-    *(p++) = '%';
-    *(p++) = 's';
-    if (option & 1)
-        *(p++) = ',';
-    else
-        *(p++) = '/';
-    *(p++) = '%';
-    *(p++) = 's';
-    if (option & 1)
-        *(p++) = ')';
-    *(p++) = '\00';
-    result = PyString_FromFormat(buffer, PyString_AS_STRING(numstr),
-                                 PyString_AS_STRING(denstr));
-#else
     *(p++) = '%';
     *(p++) = 'U';
     if (option & 1)
@@ -950,7 +781,6 @@ GMPy_PyStr_From_MPQ(MPQ_Object *obj, int base, int option, CTXT_Object *context)
         *(p++) = ')';
     *(p++) = '\00';
     result = PyUnicode_FromFormat(buffer, numstr, denstr);
-#endif
     Py_DECREF(numstr);
     Py_DECREF(denstr);
     return result;
@@ -961,11 +791,9 @@ GMPy_PyFloat_From_MPQ(MPQ_Object *obj, CTXT_Object *context)
 {
     double res;
 
-    assert(MPQ_Check(obj));
-
     res = mpq_get_d(obj->q);
 
-    if (Py_IS_INFINITY(res)) {
+    if (isinf(res)) {
         OVERFLOW_ERROR("'mpq' too large to convert to float");
         return NULL;
     }
@@ -994,15 +822,15 @@ GMPy_MPQ_From_Fraction(PyObject* obj, CTXT_Object *context)
 
     num = PyObject_GetAttrString(obj, "numerator");
     den = PyObject_GetAttrString(obj, "denominator");
-    if (!num || !PyIntOrLong_Check(num) || !den || !PyIntOrLong_Check(den)) {
+    if (!num || !PyLong_Check(num) || !den || !PyLong_Check(den)) {
         SYSTEM_ERROR("Object does not appear to be Fraction");
         Py_XDECREF(num);
         Py_XDECREF(den);
         Py_DECREF((PyObject*)result);
         return NULL;
     }
-    mpz_set_PyIntOrLong(mpq_numref(result->q), num);
-    mpz_set_PyIntOrLong(mpq_denref(result->q), den);
+    mpz_set_PyLong(mpq_numref(result->q), num);
+    mpz_set_PyLong(mpq_denref(result->q), den);
     Py_DECREF(num);
     Py_DECREF(den);
     return result;
@@ -1025,8 +853,148 @@ GMPy_MPQ_From_Number(PyObject *obj, CTXT_Object *context)
     if (PyFloat_Check(obj))
         return GMPy_MPQ_From_PyFloat(obj, context);
 
-    if (PyIntOrLong_Check(obj))
-        return GMPy_MPQ_From_PyIntOrLong(obj, context);
+    if (PyLong_Check(obj))
+        return GMPy_MPQ_From_PyLong(obj, context);
+
+    if (XMPZ_Check(obj))
+        return GMPy_MPQ_From_XMPZ((XMPZ_Object*)obj, context);
+
+    if (IS_FRACTION(obj))
+        return GMPy_MPQ_From_Fraction(obj, context);
+
+    PyObject *pair = PyObject_CallMethod(obj, "as_integer_ratio", NULL);
+    if (pair != NULL) {
+         MPQ_Object *res = (MPQ_Object*)GMPy_MPQ_NewInit(&MPQ_Type, pair, NULL);
+         Py_DECREF(pair);
+         return res;
+    }
+    PyErr_Clear();
+
+    if (HAS_MPQ_CONVERSION(obj)) {
+        MPQ_Object * res = (MPQ_Object *) PyObject_CallMethod(obj, "__mpq__", NULL);
+
+        if (res != NULL && MPQ_Check(res)) {
+            return res;
+        }
+        else {
+            Py_XDECREF((PyObject*)res);
+            goto error;
+        }
+    }
+
+    if (HAS_MPZ_CONVERSION(obj)) {
+        MPZ_Object * res = (MPZ_Object *) PyObject_CallMethod(obj, "__mpz__", NULL);
+
+        if (res != NULL && MPZ_Check(res)) {
+            MPQ_Object * temp = GMPy_MPQ_From_MPZ(res, context);
+            Py_DECREF(res);
+            return temp;
+        }
+        else {
+            Py_XDECREF((PyObject*)res);
+            goto error;
+        }
+    }
+
+  error:
+    TYPE_ERROR("cannot convert object to mpq");
+    return NULL;
+}
+
+static MPQ_Object*
+GMPy_MPQ_From_NumberWithType(PyObject *obj, int xtype, CTXT_Object *context)
+{
+    if (IS_TYPE_MPQ(xtype)) {
+        Py_INCREF(obj);
+        return (MPQ_Object*)obj;
+    }
+
+    if (IS_TYPE_MPZ(xtype))
+        return GMPy_MPQ_From_MPZ((MPZ_Object*)obj, context);
+
+    if (IS_TYPE_MPFR(xtype))
+        return GMPy_MPQ_From_MPFR((MPFR_Object*)obj, context);
+
+    if (IS_TYPE_PyFloat(xtype))
+        return GMPy_MPQ_From_PyFloat(obj, context);
+
+    if (IS_TYPE_PyInteger(xtype))
+        return GMPy_MPQ_From_PyLong(obj, context);
+
+    if (IS_TYPE_XMPZ(xtype))
+        return GMPy_MPQ_From_XMPZ((XMPZ_Object*)obj, context);
+
+    if (IS_TYPE_PyFraction(xtype))
+        return GMPy_MPQ_From_Fraction(obj, context);
+
+    if (IS_TYPE_HAS_MPQ(xtype)) {
+        MPQ_Object * res = (MPQ_Object *) PyObject_CallMethod(obj, "__mpq__", NULL);
+
+        if (res != NULL && MPQ_Check(res)) {
+            return res;
+        }
+        else {
+            Py_XDECREF((PyObject*)res);
+            goto error;
+        }
+    }
+
+    if (IS_TYPE_HAS_MPZ(xtype)) {
+        MPZ_Object * res = (MPZ_Object *) PyObject_CallMethod(obj, "__mpz__", NULL);
+
+        if (res != NULL && MPZ_Check(res)) {
+            MPQ_Object * temp = GMPy_MPQ_From_MPZ(res, context);
+            Py_DECREF(res);
+            return temp;
+        }
+        else {
+            Py_XDECREF((PyObject*)res);
+            goto error;
+        }
+    }
+
+  error:
+    TYPE_ERROR("cannot convert object to mpq");
+    return NULL;
+}
+
+static MPQ_Object*
+GMPy_MPQ_From_RationalWithTypeAndCopy(PyObject *obj, int xtype, CTXT_Object *context)
+{
+    MPQ_Object *result = NULL, *temp = NULL;
+
+    result = GMPy_MPQ_From_RationalWithType(obj, xtype, context);
+
+    if (result == NULL)
+        return result;
+
+    if (Py_REFCNT(result) == 1)
+        return result;
+
+    if (!(temp = GMPy_MPQ_New(context))) {
+        /* LCOV_EXCL_START */
+        return NULL;
+        /* LCOV_EXCL_STOP */
+    }
+
+    mpq_set(temp->q, result->q);
+    Py_DECREF((PyObject*)result);
+    return temp;
+}
+
+static MPQ_Object*
+GMPy_MPQ_From_Rational(PyObject *obj, CTXT_Object *context)
+{
+    if (MPQ_Check(obj)) {
+        Py_INCREF(obj);
+        return (MPQ_Object*)obj;
+    }
+
+    if (MPZ_Check(obj))
+        return GMPy_MPQ_From_MPZ((MPZ_Object*)obj, context);
+
+    if (PyLong_Check(obj))
+        return GMPy_MPQ_From_PyLong(obj, context);
 
     if (XMPZ_Check(obj))
         return GMPy_MPQ_From_XMPZ((XMPZ_Object*)obj, context);
@@ -1089,27 +1057,28 @@ GMPy_MPQ_From_RationalAndCopy(PyObject *obj, CTXT_Object *context)
     return temp;
 }
 
+
 static MPQ_Object*
-GMPy_MPQ_From_Rational(PyObject *obj, CTXT_Object *context)
+GMPy_MPQ_From_RationalWithType(PyObject *obj, int xtype, CTXT_Object *context)
 {
-    if (MPQ_Check(obj)) {
+    if (IS_TYPE_MPQ(xtype)) {
         Py_INCREF(obj);
         return (MPQ_Object*)obj;
     }
 
-    if (MPZ_Check(obj))
+    if (IS_TYPE_MPZ(xtype))
         return GMPy_MPQ_From_MPZ((MPZ_Object*)obj, context);
 
-    if (PyIntOrLong_Check(obj))
-        return GMPy_MPQ_From_PyIntOrLong(obj, context);
+    if (IS_TYPE_PyInteger(xtype))
+        return GMPy_MPQ_From_PyLong(obj, context);
 
-    if (XMPZ_Check(obj))
+    if (IS_TYPE_XMPZ(xtype))
         return GMPy_MPQ_From_XMPZ((XMPZ_Object*)obj, context);
 
-    if (IS_FRACTION(obj))
+    if (IS_TYPE_PyFraction(xtype))
         return GMPy_MPQ_From_Fraction(obj, context);
 
-    if (HAS_MPQ_CONVERSION(obj)) {
+    if (IS_TYPE_HAS_MPQ(xtype)) {
         MPQ_Object * res = (MPQ_Object *) PyObject_CallMethod(obj, "__mpq__", NULL);
 
         if (res != NULL && MPQ_Check(res)) {
@@ -1121,7 +1090,7 @@ GMPy_MPQ_From_Rational(PyObject *obj, CTXT_Object *context)
         }
     }
 
-    if (HAS_MPZ_CONVERSION(obj)) {
+    if (IS_TYPE_HAS_MPZ(xtype)) {
         MPZ_Object * res = (MPZ_Object *) PyObject_CallMethod(obj, "__mpz__", NULL);
 
         if (res != NULL && MPZ_Check(res)) {
@@ -1150,7 +1119,7 @@ GMPy_MPQ_From_Rational(PyObject *obj, CTXT_Object *context)
 int
 GMPy_MPQ_ConvertArg(PyObject *arg, PyObject **ptr)
 {
-    MPQ_Object* result = GMPy_MPQ_From_Number(arg, NULL);
+    MPQ_Object* result = GMPy_MPQ_From_NumberWithType(arg, GMPy_ObjectType(arg), NULL);
 
     if (result) {
         *ptr = (PyObject*)result;

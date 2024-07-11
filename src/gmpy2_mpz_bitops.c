@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_mpz_bitops.c                                                      *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -39,11 +37,11 @@ GMPy_MPZ_bit_length_method(PyObject *self, PyObject *other)
     if (mpz_size(MPZ(self)))
         n = mpz_sizeinbase(MPZ(self), 2);
 
-    return PyIntOrLong_FromMpBitCnt(n);
+    return GMPy_PyLong_FromMpBitCnt(n);
 }
 
 PyDoc_STRVAR(doc_bit_length_function,
-"bit_length(x) -> int\n\n"
+"bit_length(x, /) -> int\n\n"
 "Return the number of significant bits in the radix-2\n"
 "representation of x. Note: bit_length(0) returns 0.");
 
@@ -61,12 +59,12 @@ GMPy_MPZ_bit_length_function(PyObject *self, PyObject *other)
         n = mpz_sizeinbase(tempx->z, 2);
 
     Py_DECREF((PyObject*)tempx);
-    return PyIntOrLong_FromMpBitCnt(n);
+    return GMPy_PyLong_FromMpBitCnt(n);
 }
 
 PyDoc_STRVAR(doc_bit_mask,
-"bit_mask(n) -> mpz\n\n"
-"Return an 'mpz' exactly n bits in length with all bits set.\n");
+"bit_mask(n, /) -> mpz\n\n"
+"Return an `mpz` exactly n bits in length with all bits set.\n");
 
 static PyObject *
 GMPy_MPZ_bit_mask(PyObject *self, PyObject *other)
@@ -74,7 +72,7 @@ GMPy_MPZ_bit_mask(PyObject *self, PyObject *other)
     mp_bitcnt_t n = 0;
     MPZ_Object* result;
 
-    n = mp_bitcnt_t_From_Integer(other);
+    n = GMPy_Integer_AsMpBitCnt(other);
     if (n == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
         return NULL;
     }
@@ -91,19 +89,20 @@ GMPy_MPZ_bit_mask(PyObject *self, PyObject *other)
 
 /* return scan0/scan1 for an mpz */
 PyDoc_STRVAR(doc_bit_scan0_method,
-"x.bit_scan0(n=0) -> int\n\n"
+"x.bit_scan0(n=0, /) -> int | None\n\n"
 "Return the index of the first 0-bit of x with index >= n. n >= 0.\n"
 "If there are no more 0-bits in x at or above index n (which can\n"
 "only happen for x<0, assuming an infinitely long 2's complement\n"
-"format), then None is returned.");
+"format), then `None` is returned.");
 
 static PyObject *
-GMPy_MPZ_bit_scan0_method(PyObject *self, PyObject *args)
+GMPy_MPZ_bit_scan0_method(PyObject *self, PyObject *const *args,
+                          Py_ssize_t nargs)
 {
     mp_bitcnt_t index, starting_bit = 0;
 
-    if (PyTuple_GET_SIZE(args) == 1) {
-        starting_bit = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 0));
+    if (nargs == 1) {
+        starting_bit = GMPy_Integer_AsMpBitCnt(args[0]);
         if (starting_bit == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
             return NULL;
         }
@@ -115,33 +114,34 @@ GMPy_MPZ_bit_scan0_method(PyObject *self, PyObject *args)
         Py_RETURN_NONE;
     }
     else {
-        return PyIntOrLong_FromMpBitCnt(index);
+        return GMPy_PyLong_FromMpBitCnt(index);
     }
 }
 
 PyDoc_STRVAR(doc_bit_scan0_function,
-"bit_scan0(x, n=0) -> int\n\n"
+"bit_scan0(x, n=0, /) -> int | None\n\n"
 "Return the index of the first 0-bit of x with index >= n. n >= 0.\n"
 "If there are no more 0-bits in x at or above index n (which can\n"
 "only happen for x<0, assuming an infinitely long 2's complement\n"
-"format), then None is returned.");
+"format), then `None` is returned.");
 
 static PyObject *
-GMPy_MPZ_bit_scan0_function(PyObject *self, PyObject *args)
+GMPy_MPZ_bit_scan0_function(PyObject *self, PyObject *const *args,
+                            Py_ssize_t nargs)
 {
     mp_bitcnt_t index, starting_bit = 0;
     MPZ_Object *tempx = NULL;
 
-    if (PyTuple_GET_SIZE(args) == 0 || PyTuple_GET_SIZE(args) > 2) {
+    if (nargs == 0 || nargs > 2) {
         goto err;
     }
 
-    if (!(tempx = GMPy_MPZ_From_Integer(PyTuple_GET_ITEM(args, 0), NULL))) {
+    if (!(tempx = GMPy_MPZ_From_Integer(args[0], NULL))) {
         goto err;
     }
 
-    if (PyTuple_GET_SIZE(args) == 2) {
-        starting_bit = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 1));
+    if (nargs == 2) {
+        starting_bit = GMPy_Integer_AsMpBitCnt(args[1]);
         if (starting_bit == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
             goto err_index;
         }
@@ -154,7 +154,7 @@ GMPy_MPZ_bit_scan0_function(PyObject *self, PyObject *args)
         Py_RETURN_NONE;
     }
     else {
-        return PyIntOrLong_FromMpBitCnt(index);
+        return GMPy_PyLong_FromMpBitCnt(index);
     }
 
   err:
@@ -165,19 +165,20 @@ GMPy_MPZ_bit_scan0_function(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(doc_bit_scan1_method,
-"x.bit_scan1(n=0) -> int\n\n"
+"x.bit_scan1(n=0, /) -> int | None\n\n"
 "Return the index of the first 1-bit of x with index >= n. n >= 0.\n"
 "If there are no more 1-bits in x at or above index n (which can\n"
 "only happen for x>=0, assuming an infinitely long 2's complement\n"
-"format), then None is returned.");
+"format), then `None` is returned.");
 
 static PyObject *
-GMPy_MPZ_bit_scan1_method(PyObject *self, PyObject *args)
+GMPy_MPZ_bit_scan1_method(PyObject *self, PyObject *const *args,
+                          Py_ssize_t nargs)
 {
     mp_bitcnt_t index, starting_bit = 0;
 
-    if (PyTuple_GET_SIZE(args) == 1) {
-        starting_bit = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 0));
+    if (nargs == 1) {
+        starting_bit = GMPy_Integer_AsMpBitCnt(args[0]);
         if (starting_bit == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
             return NULL;
         }
@@ -189,33 +190,34 @@ GMPy_MPZ_bit_scan1_method(PyObject *self, PyObject *args)
         Py_RETURN_NONE;
     }
     else {
-        return PyIntOrLong_FromMpBitCnt(index);
+        return GMPy_PyLong_FromMpBitCnt(index);
     }
 }
 
 PyDoc_STRVAR(doc_bit_scan1_function,
-"bit_scan1(x, n=0) -> int\n\n"
+"bit_scan1(x, n=0, /) -> int | None\n\n"
 "Return the index of the first 1-bit of x with index >= n. n >= 0.\n"
 "If there are no more 1-bits in x at or above index n (which can\n"
 "only happen for x>=0, assuming an infinitely long 2's complement\n"
-"format), then None is returned.");
+"format), then `None` is returned.");
 
 static PyObject *
-GMPy_MPZ_bit_scan1_function(PyObject *self, PyObject *args)
+GMPy_MPZ_bit_scan1_function(PyObject *self, PyObject *const *args,
+                            Py_ssize_t nargs)
 {
     mp_bitcnt_t index, starting_bit = 0;
     MPZ_Object *tempx = NULL;
 
-    if (PyTuple_GET_SIZE(args) == 0 || PyTuple_GET_SIZE(args) > 2) {
+    if (nargs == 0 || nargs > 2) {
         goto err;
     }
 
-    if (!(tempx = GMPy_MPZ_From_Integer(PyTuple_GET_ITEM(args, 0), NULL))) {
+    if (!(tempx = GMPy_MPZ_From_Integer(args[0], NULL))) {
         goto err;
     }
 
-    if (PyTuple_GET_SIZE(args) == 2) {
-        starting_bit = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 1));
+    if (nargs == 2) {
+        starting_bit = GMPy_Integer_AsMpBitCnt(args[1]);
         if (starting_bit == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
             goto err_index;
         }
@@ -228,7 +230,7 @@ GMPy_MPZ_bit_scan1_function(PyObject *self, PyObject *args)
         Py_RETURN_NONE;
     }
     else {
-        return PyIntOrLong_FromMpBitCnt(index);
+        return GMPy_PyLong_FromMpBitCnt(index);
     }
 
   err:
@@ -240,25 +242,26 @@ GMPy_MPZ_bit_scan1_function(PyObject *self, PyObject *args)
 
 /* get & return one bit from an mpz */
 PyDoc_STRVAR(doc_bit_test_function,
-"bit_test(x, n) -> bool\n\n"
+"bit_test(x, n, /) -> bool\n\n"
 "Return the value of the n-th bit of x.");
 
 static PyObject *
-GMPy_MPZ_bit_test_function(PyObject *self, PyObject *args)
+GMPy_MPZ_bit_test_function(PyObject *self, PyObject *const *args,
+                           Py_ssize_t nargs)
 {
     mp_bitcnt_t bit_index;
     int temp;
     MPZ_Object *tempx = NULL;
 
-    if (PyTuple_GET_SIZE(args) != 2) {
+    if (nargs != 2) {
         goto err;
     }
 
-    if (!(tempx = GMPy_MPZ_From_Integer(PyTuple_GET_ITEM(args, 0), NULL))) {
+    if (!(tempx = GMPy_MPZ_From_Integer(args[0], NULL))) {
         goto err;
     }
 
-    bit_index = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 1));
+    bit_index = GMPy_Integer_AsMpBitCnt(args[1]);
     if (bit_index == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
         goto err_index;
     }
@@ -279,7 +282,7 @@ GMPy_MPZ_bit_test_function(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(doc_bit_test_method,
-"x.bit_test(n) -> bool\n\n"
+"x.bit_test(n, /) -> bool\n\n"
 "Return the value of the n-th bit of x.");
 
 static PyObject *
@@ -287,7 +290,7 @@ GMPy_MPZ_bit_test_method(PyObject *self, PyObject *other)
 {
     mp_bitcnt_t bit_index;
 
-    bit_index = mp_bitcnt_t_From_Integer(other);
+    bit_index = GMPy_Integer_AsMpBitCnt(other);
     if (bit_index == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
         return NULL;
     }
@@ -299,7 +302,7 @@ GMPy_MPZ_bit_test_method(PyObject *self, PyObject *other)
 }
 
 PyDoc_STRVAR(doc_bit_clear_function,
-"bit_clear(x, n) -> mpz\n\n"
+"bit_clear(x, n, /) -> mpz\n\n"
 "Return a copy of x with the n-th bit cleared.");
 
 static PyObject *
@@ -317,7 +320,7 @@ GMPy_MPZ_bit_clear_function(PyObject *self, PyObject *args)
     if (!(tempx = GMPy_MPZ_From_Integer(PyTuple_GET_ITEM(args, 0), NULL)))
         goto err;
 
-    bit_index = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 1));
+    bit_index = GMPy_Integer_AsMpBitCnt(PyTuple_GET_ITEM(args, 1));
     if (bit_index == (mp_bitcnt_t)(-1) && PyErr_Occurred())
         goto err_index;
 
@@ -336,7 +339,7 @@ GMPy_MPZ_bit_clear_function(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(doc_bit_clear_method,
-"x.bit_clear(n) -> mpz\n\n"
+"x.bit_clear(n, /) -> mpz\n\n"
 "Return a copy of x with the n-th bit cleared.");
 
 static PyObject *
@@ -348,7 +351,7 @@ GMPy_MPZ_bit_clear_method(PyObject *self, PyObject *other)
     if (!(result = GMPy_MPZ_New(NULL)))
         return NULL;
 
-    bit_index = mp_bitcnt_t_From_Integer(other);
+    bit_index = GMPy_Integer_AsMpBitCnt(other);
     if (bit_index == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
         Py_DECREF(result);
         return NULL;
@@ -360,7 +363,7 @@ GMPy_MPZ_bit_clear_method(PyObject *self, PyObject *other)
 }
 
 PyDoc_STRVAR(doc_bit_set_function,
-"bit_set(x, n) -> mpz\n\n"
+"bit_set(x, n, /) -> mpz\n\n"
 "Return a copy of x with the n-th bit set.");
 
 static PyObject *
@@ -378,7 +381,7 @@ GMPy_MPZ_bit_set_function(PyObject *self, PyObject *args)
     if (!(tempx = GMPy_MPZ_From_Integer(PyTuple_GET_ITEM(args, 0), NULL)))
         goto err;
 
-    bit_index = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 1));
+    bit_index = GMPy_Integer_AsMpBitCnt(PyTuple_GET_ITEM(args, 1));
     if (bit_index == (mp_bitcnt_t)(-1) && PyErr_Occurred())
         goto err_index;
 
@@ -397,7 +400,7 @@ GMPy_MPZ_bit_set_function(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(doc_bit_set_method,
-"x.bit_set(n) -> mpz\n\n"
+"x.bit_set(n, /) -> mpz\n\n"
 "Return a copy of x with the n-th bit set.");
 
 static PyObject *
@@ -409,7 +412,7 @@ GMPy_MPZ_bit_set_method(PyObject *self, PyObject *other)
     if (!(result = GMPy_MPZ_New(NULL)))
         return NULL;
 
-    bit_index = mp_bitcnt_t_From_Integer(other);
+    bit_index = GMPy_Integer_AsMpBitCnt(other);
     if (bit_index == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
         Py_DECREF(result);
         return NULL;
@@ -421,7 +424,7 @@ GMPy_MPZ_bit_set_method(PyObject *self, PyObject *other)
 }
 
 PyDoc_STRVAR(doc_bit_flip_function,
-"bit_flip(x, n) -> mpz\n\n"
+"bit_flip(x, n, /) -> mpz\n\n"
 "Return a copy of x with the n-th bit inverted.");
 
 static PyObject *
@@ -439,7 +442,7 @@ GMPy_MPZ_bit_flip_function(PyObject *self, PyObject *args)
     if (!(tempx = GMPy_MPZ_From_Integer(PyTuple_GET_ITEM(args, 0), NULL)))
         goto err;
 
-    bit_index = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 1));
+    bit_index = GMPy_Integer_AsMpBitCnt(PyTuple_GET_ITEM(args, 1));
     if (bit_index == (mp_bitcnt_t)(-1) && PyErr_Occurred())
         goto err_index;
 
@@ -458,7 +461,7 @@ GMPy_MPZ_bit_flip_function(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(doc_bit_flip_method,
-"x.bit_flip(n) -> mpz\n\n"
+"x.bit_flip(n, /) -> mpz\n\n"
 "Return a copy of x with the n-th bit inverted.");
 
 static PyObject *
@@ -470,7 +473,7 @@ GMPy_MPZ_bit_flip_method(PyObject *self, PyObject *other)
     if (!(result = GMPy_MPZ_New(NULL)))
         return NULL;
 
-    bit_index = mp_bitcnt_t_From_Integer(other);
+    bit_index = GMPy_Integer_AsMpBitCnt(other);
     if (bit_index == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
         Py_DECREF(result);
         return NULL;
@@ -515,7 +518,9 @@ GMPy_MPZ_And_Slot(PyObject *self, PyObject *other)
         mpz_and(result->z, result->z, MPZ(other));
     }
     else {
+        /* LCOV_EXCL_START */
         Py_RETURN_NOTIMPLEMENTED;
+        /* LCOV_EXCL_STOP */
     }
     return (PyObject*)result;
 }
@@ -543,7 +548,9 @@ GMPy_MPZ_Ior_Slot(PyObject *self, PyObject *other)
         mpz_ior(result->z, result->z, MPZ(other));
     }
     else {
+        /* LCOV_EXCL_START */
         Py_RETURN_NOTIMPLEMENTED;
+        /* LCOV_EXCL_STOP */
     }
     return (PyObject*)result;
 }
@@ -571,7 +578,9 @@ GMPy_MPZ_Xor_Slot(PyObject *self, PyObject *other)
         mpz_xor(result->z, result->z, MPZ(other));
     }
     else {
+        /* LCOV_EXCL_START */
         Py_RETURN_NOTIMPLEMENTED;
+        /* LCOV_EXCL_STOP */
     }
     return (PyObject*)result;
 }
@@ -582,7 +591,7 @@ GMPy_MPZ_Rshift_Slot(PyObject *self, PyObject *other)
     mp_bitcnt_t count;
     MPZ_Object *result, *tempx;
 
-    count = mp_bitcnt_t_From_Integer(other);
+    count = GMPy_Integer_AsMpBitCnt(other);
     if ((count == (mp_bitcnt_t)(-1)) && PyErr_Occurred())
         return NULL;
 
@@ -612,7 +621,7 @@ GMPy_MPZ_Lshift_Slot(PyObject *self, PyObject *other)
     mp_bitcnt_t count;
     MPZ_Object *result, *tempx;
 
-    count = mp_bitcnt_t_From_Integer(other);
+    count = GMPy_Integer_AsMpBitCnt(other);
     if ((count == (mp_bitcnt_t)(-1)) && PyErr_Occurred())
         return NULL;
 
@@ -637,7 +646,7 @@ GMPy_MPZ_Lshift_Slot(PyObject *self, PyObject *other)
 }
 
 PyDoc_STRVAR(doc_popcount,
-"popcount(x) -> int\n\n"
+"popcount(x, /) -> int\n\n"
 "Return the number of 1-bits set in x. If x<0, the number of\n"
 "1-bits is infinite so -1 is returned in that case.");
 
@@ -653,7 +662,7 @@ GMPy_MPZ_popcount(PyObject *self, PyObject *other)
         if (n == (mp_bitcnt_t)(-1))
             return PyLong_FromLong(-1);
         else
-            return PyIntOrLong_FromMpBitCnt(n);
+            return GMPy_PyLong_FromMpBitCnt(n);
     }
     else {
         TYPE_ERROR("popcount() requires 'mpz' argument");
@@ -661,8 +670,78 @@ GMPy_MPZ_popcount(PyObject *self, PyObject *other)
     }
 }
 
+PyDoc_STRVAR(doc_bit_count_method,
+"x.bit_count() -> int\n\n"
+"Return the number of 1-bits set in abs(x).");
+
+static PyObject *
+GMPy_MPZ_bit_count_method(PyObject *self, PyObject *other)
+{
+    mp_bitcnt_t n = 0;
+    MPZ_Object *temppos = NULL;
+
+    /* Since tempx could just be an additional reference to
+     * an existing mpz, we need to make a copy to change the
+     * sign.
+     */
+
+    if (mpz_sgn(MPZ(self)) == -1) {
+        if (!(temppos = GMPy_MPZ_New(NULL))) {
+            /* LCOV_EXCL_START */
+            return NULL;
+            /* LCOV_EXCL_STOP */
+        }
+        mpz_abs(MPZ(temppos), MPZ(self));
+        n = mpz_popcount(MPZ(temppos));
+        Py_DECREF((PyObject*)temppos);
+    }
+    else {
+        n = mpz_popcount(MPZ(self));
+    }
+    return GMPy_PyLong_FromMpBitCnt(n);
+}
+
+PyDoc_STRVAR(doc_bit_count,
+"bit_count(x, /) -> int\n\n"
+"Return the number of 1-bits set in abs(x).");
+
+static PyObject *
+GMPy_MPZ_bit_count(PyObject *self, PyObject *other)
+{
+    mp_bitcnt_t n;
+    MPZ_Object *tempx = NULL, *temppos = NULL;
+
+
+    if ((tempx = GMPy_MPZ_From_Integer(other, NULL))) {
+        /* Since tempx could just be an additional reference to
+         * an existing mpz, we need to make a copy to change the
+         * sign.
+         */
+        if (mpz_sgn(MPZ(tempx)) == -1) {
+            if (!(temppos = GMPy_MPZ_New(NULL))) {
+                /* LCOV_EXCL_START */
+                return NULL;
+                /* LCOV_EXCL_STOP */
+            }
+            mpz_abs(MPZ(temppos), MPZ(tempx));
+            n = mpz_popcount(MPZ(temppos));
+            Py_DECREF((PyObject*)tempx);
+            Py_DECREF((PyObject*)temppos);
+        }
+        else {
+            n = mpz_popcount(MPZ(tempx));
+            Py_DECREF((PyObject*)tempx);
+        }
+        return GMPy_PyLong_FromMpBitCnt(n);
+    }
+    else {
+        TYPE_ERROR("bit_count() requires 'mpz' argument");
+        return NULL;
+    }
+}
+
 PyDoc_STRVAR(doc_hamdist,
-"hamdist(x, y) -> int\n\n"
+"hamdist(x, y, /) -> int\n\n"
 "Return the Hamming distance (number of bit-positions where the\n"
 "bits differ) between integers x and y.");
 
@@ -680,7 +759,7 @@ GMPy_MPZ_hamdist(PyObject *self, PyObject *args)
     if (!tempx || !tempy)
         goto err;
 
-    result = PyIntOrLong_FromMpBitCnt(mpz_hamdist(tempx->z, tempy->z));
+    result = GMPy_PyLong_FromMpBitCnt(mpz_hamdist(tempx->z, tempy->z));
     Py_DECREF((PyObject*)tempx);
     Py_DECREF((PyObject*)tempy);
     return result;
@@ -691,4 +770,3 @@ GMPy_MPZ_hamdist(PyObject *self, PyObject *args)
     Py_XDECREF((PyObject*)tempy);
     return NULL;
 }
-

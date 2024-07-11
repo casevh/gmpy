@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_mpq_misc.c                                                        *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -67,7 +65,7 @@ GMPy_MPQ_Attrib_GetImag(MPQ_Object *self, void *closure)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpq_function_numer,
-"numer(x) -> mpz\n\n"
+"numer(x, /) -> mpz\n\n"
 "Return the numerator of x.");
 
 static PyObject *
@@ -91,7 +89,7 @@ GMPy_MPQ_Function_Numer(PyObject *self, PyObject *other)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpq_function_denom,
-"denom(x) -> mpz\n\n"
+"denom(x, /) -> mpz\n\n"
 "Return the denominator of x.");
 
 static PyObject *
@@ -114,9 +112,50 @@ GMPy_MPQ_Function_Denom(PyObject *self, PyObject *other)
     return (PyObject*)result;
 }
 
+PyDoc_STRVAR(GMPy_doc_mpq_method_as_integer_ratio,
+"x.as_integer_ratio() -> tuple[mpz, mpz]\n\n\
+Return a pair of integers, whose ratio is exactly equal to the\n\
+original number.  The ratio is in lowest terms and has a\n\
+positive denominator.");
+static PyObject *
+GMPy_MPQ_Method_As_Integer_Ratio(PyObject *self, PyObject *Py_UNUSED(ignored))
+{
+    return PyTuple_Pack(2, GMPy_MPQ_Attrib_GetNumer((MPQ_Object*)self, NULL),
+                        GMPy_MPQ_Attrib_GetDenom((MPQ_Object*)self, NULL));
+}
+
+PyDoc_STRVAR(GMPy_doc_mpq_method_from_float,
+"mpq.from_float(f, /) -> mpq\n\n\
+Converts a finite float to a rational number, exactly.");
+
+PyDoc_STRVAR(GMPy_doc_mpq_method_from_decimal,
+"mpq.from_decimal(dec, /) -> mpq\n\n\
+Converts a finite `decimal.Decimal` instance to a rational number, exactly.");
+
+static PyObject *
+GMPy_MPQ_Method_From_As_Integer_Ratio(PyTypeObject *type, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *pair, *result;
+
+    if (nargs != 1) {
+        TYPE_ERROR("missing 1 required positional argument");
+        return NULL;
+    }
+
+    pair = PyObject_CallMethod(args[0], "as_integer_ratio", NULL);
+    if (pair == NULL) {
+        return NULL;
+    }
+
+    result = GMPy_MPQ_NewInit(type, pair, NULL);
+    Py_DECREF(pair);
+
+    return result;
+}
+
 PyDoc_STRVAR(GMPy_doc_function_qdiv,
-"qdiv(x[, y=1]) -> number\n\n"
-"Return x/y as 'mpz' if possible, or as 'mpq' if x is not exactly\n"
+"qdiv(x, y=1, /) -> mpz | mpq\n\n"
+"Return x/y as `mpz` if possible, or as `mpq` if x is not exactly\n"
 "divisible by y.");
 
 static PyObject *
@@ -314,7 +353,7 @@ GMPy_MPQ_Method_Round(PyObject *self, PyObject *args)
     }
 
     if (PyTuple_GET_SIZE(args) == 1) {
-        round_digits = PyIntOrLong_AsSsize_t(PyTuple_GET_ITEM(args, 0));
+        round_digits = PyLong_AsSsize_t(PyTuple_GET_ITEM(args, 0));
         if (round_digits == -1 && PyErr_Occurred()) {
             TYPE_ERROR("__round__() requires 'int' argument");
             return NULL;
@@ -326,7 +365,7 @@ GMPy_MPQ_Method_Round(PyObject *self, PyObject *args)
     }
 
     mpz_init(temp);
-    mpz_ui_pow_ui(temp, 10, round_digits > 0 ? round_digits : -round_digits);
+    mpz_ui_pow_ui(temp, 10, round_digits > 0 ? (unsigned long)round_digits : (unsigned long)-round_digits);
 
     mpq_set(resultq->q, MPQ(self));
     if (round_digits > 0) {
@@ -372,7 +411,7 @@ PyDoc_STRVAR(GMPy_doc_mpq_method_sizeof,
 static PyObject *
 GMPy_MPQ_Method_Sizeof(PyObject *self, PyObject *other)
 {
-    return PyIntOrLong_FromSize_t(sizeof(MPQ_Object) + \
+    return PyLong_FromSize_t(sizeof(MPQ_Object) + \
         (mpq_numref(MPQ(self))->_mp_alloc * sizeof(mp_limb_t)) + \
         (mpq_denref(MPQ(self))->_mp_alloc * sizeof(mp_limb_t)));
 }

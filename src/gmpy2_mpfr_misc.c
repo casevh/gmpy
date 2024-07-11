@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_mpfr_misc.c                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -27,11 +25,11 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 PyDoc_STRVAR(GMPy_doc_function_f2q,
-"f2q(x,[err]) -> mpq\n\n"
-"Return the 'best' mpq approximating x to within relative error 'err'.\n"
+"f2q(x, err=0, /) -> mpz | mpq\n\n"
+"Return the 'best' `mpq` approximating x to within relative error err.\n"
 "Default is the precision of x. Uses Stern-Brocot tree to find the\n"
-"'best' approximation. An 'mpz' is returned if the the denominator\n"
-"is 1. If 'err'<0, relative error is 2.0 ** err.");
+"'best' approximation. An `mpz` object is returned if the denominator\n"
+"is 1. If err<0, relative error is 2.0 ** err.");
 
 static PyObject *
 GMPy_Real_F2Q(PyObject *x, PyObject *y, CTXT_Object *context)
@@ -102,7 +100,7 @@ GMPy_Context_F2Q(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_free_cache,
-"free_cache()\n\n"
+"free_cache() -> None\n\n"
 "Free the internal cache of constants maintained by MPFR.");
 
 static PyObject *
@@ -113,10 +111,10 @@ GMPy_MPFR_Free_Cache(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_can_round,
-"can_round(b, err, rnd1, rnd2, prec)\n\n"
+"can_round(b, err, rnd1, rnd2, prec, /) -> bool\n\n"
 "Let b be an approximation to an unknown number x that is rounded\n"
 "according to rnd1. Assume the b has an error at most two to the power\n"
-"of E(b)-err where E(b) is the exponent of b. Then return true if x\n"
+"of E(b)-err where E(b) is the exponent of b. Then return `True` if x\n"
 "can be rounded correctly to prec bits with rounding mode rnd2.");
 
 static PyObject *
@@ -156,27 +154,27 @@ GMPy_MPFR_Can_Round(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_get_emin_min,
-"get_emin_min() -> integer\n\n"
-"Return the minimum possible exponent that can be set for 'mpfr'.");
+"get_emin_min() -> int\n\n"
+"Return the minimum possible exponent that can be set for `mpfr`.");
 
 static PyObject *
 GMPy_MPFR_get_emin_min(PyObject *self, PyObject *args)
 {
-    return PyIntOrLong_FromSsize_t((Py_ssize_t)mpfr_get_emin_min());
+    return PyLong_FromSsize_t((Py_ssize_t)mpfr_get_emin_min());
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_get_emax_max,
-"get_emax_max() -> integer\n\n"
-"Return the maximum possible exponent that can be set for 'mpfr'.");
+"get_emax_max() -> int\n\n"
+"Return the maximum possible exponent that can be set for `mpfr`.");
 
 static PyObject *
 GMPy_MPFR_get_emax_max(PyObject *self, PyObject *args)
 {
-    return PyIntOrLong_FromSsize_t((Py_ssize_t)mpfr_get_emax_max());
+    return PyLong_FromSsize_t((Py_ssize_t)mpfr_get_emax_max());
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_get_max_precision,
-"get_max_precision() -> integer\n\n"
+"get_max_precision() -> int\n\n"
 "Return the maximum bits of precision that can be used for calculations.\n"
 "Note: to allow extra precision for intermediate calculations, avoid\n"
 "setting precision close the maximum precision.");
@@ -184,14 +182,14 @@ PyDoc_STRVAR(GMPy_doc_mpfr_get_max_precision,
 static PyObject *
 GMPy_MPFR_get_max_precision(PyObject *self, PyObject *args)
 {
-    return PyIntOrLong_FromSsize_t((Py_ssize_t)MPFR_PREC_MAX);
+    return PyLong_FromSsize_t((Py_ssize_t)MPFR_PREC_MAX);
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_get_exp,
-"get_exp(mpfr) -> integer\n\n"
-"Return the exponent of an mpfr. Returns 0 for NaN or Infinity and\n"
-"sets the erange flag and will raise an exception if trap_erange\n"
-"is set.");
+"get_exp(x, /) -> int\n\n"
+"Return the exponent of x. Returns 0 for NaN or Infinity and\n"
+"sets the `context.erange` flag of the current context and will\n"
+"raise an exception if `context.trap_erange` is set.");
 
 static PyObject *
 GMPy_MPFR_get_exp(PyObject *self, PyObject *other)
@@ -209,10 +207,10 @@ GMPy_MPFR_get_exp(PyObject *self, PyObject *other)
 
     if (mpfr_regular_p(MPFR(other))) {
         exp = (Py_ssize_t)mpfr_get_exp(MPFR(other));
-        result = PyIntOrLong_FromSsize_t(exp);
+        result = PyLong_FromSsize_t(exp);
     }
     else if (mpfr_zero_p(MPFR(other))) {
-        result = PyIntOrLong_FromSsize_t(0);
+        result = PyLong_FromSsize_t(0);
     }
     else {
         context->ctx.erange = 1;
@@ -220,18 +218,18 @@ GMPy_MPFR_get_exp(PyObject *self, PyObject *other)
             GMPY_ERANGE("Can not get exponent from NaN or Infinity.");
         }
         else {
-            result = PyIntOrLong_FromSsize_t(0);
+            result = PyLong_FromSsize_t(0);
         }
     }
     return result;
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_set_exp,
-"set_exp(mpfr, n) -> mpfr\n\n"
-"Set the exponent of an mpfr to n. If n is outside the range of\n"
-"valid exponents, set_exp() will set the erange flag and either\n"
-"return the original value or raise an exception if trap_erange\n"
-"is set.");
+"set_exp(x, n, /) -> mpfr\n\n"
+"Set the exponent of x to n. If n is outside the range of\n"
+"valid exponents, `set_exp()` will set the `context.erange` flag\n"
+"of the current context and either return the original value or raise\n"
+"an exception if `context.trap_erange` is set.");
 
 static PyObject *
 GMPy_MPFR_set_exp(PyObject *self, PyObject *args)
@@ -245,13 +243,13 @@ GMPy_MPFR_set_exp(PyObject *self, PyObject *args)
 
     if (PyTuple_GET_SIZE(args) != 2 ||
         !MPFR_Check(PyTuple_GET_ITEM(args, 0)) ||
-        !PyIntOrLong_Check(PyTuple_GET_ITEM(args, 1))) {
+        !PyLong_Check(PyTuple_GET_ITEM(args, 1))) {
         TYPE_ERROR("set_exp() requires 'mpfr', 'integer' arguments");
         return NULL;
     }
 
     temp = PyTuple_GET_ITEM(args, 0);
-    exp = (mpfr_exp_t)PyIntOrLong_AsLong(PyTuple_GET_ITEM(args, 1));
+    exp = (mpfr_exp_t)PyLong_AsLong(PyTuple_GET_ITEM(args, 1));
     if (exp == -1 && PyErr_Occurred()) {
         VALUE_ERROR("exponent too large");
         return NULL;
@@ -285,8 +283,8 @@ GMPy_MPFR_set_exp(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_set_sign,
-"set_sign(mpfr, bool) -> mpfr\n\n"
-"If 'bool' is True, then return an 'mpfr' with the sign bit set.");
+"set_sign(x, s, /) -> mpfr\n\n"
+"If s is `True`, then return x with the sign bit set.");
 
 static PyObject *
 GMPy_MPFR_set_sign(PyObject *self, PyObject *args)
@@ -298,7 +296,7 @@ GMPy_MPFR_set_sign(PyObject *self, PyObject *args)
 
     if (PyTuple_GET_SIZE(args) != 2 ||
         !MPFR_Check(PyTuple_GET_ITEM(args, 0)) ||
-        !PyIntOrLong_Check(PyTuple_GET_ITEM(args, 1))) {
+        !PyLong_Check(PyTuple_GET_ITEM(args, 1))) {
         TYPE_ERROR("set_sign() requires 'mpfr', 'boolean' arguments");
         return NULL;
     }
@@ -315,9 +313,8 @@ GMPy_MPFR_set_sign(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_copy_sign,
-"copy_sign(mpfr, mpfr) -> mpfr\n\n"
-"Return an 'mpfr' composed of the first argument with the sign of the\n"
-"second argument.");
+"copy_sign(x, y, /) -> mpfr\n\n"
+"Return an `mpfr` composed of x with the sign of y.");
 
 static PyObject *
 GMPy_MPFR_copy_sign(PyObject *self, PyObject *args)
@@ -347,7 +344,7 @@ GMPy_MPFR_copy_sign(PyObject *self, PyObject *args)
 
 PyDoc_STRVAR(GMPy_doc_mpfr_set_nan,
 "nan() -> mpfr\n\n"
-"Return an 'mpfr' initialized to NaN (Not-A-Number).");
+"Return an `mpfr` initialized to NaN (Not-A-Number).");
 
 static PyObject *
 GMPy_MPFR_set_nan(PyObject *self, PyObject *other)
@@ -364,8 +361,8 @@ GMPy_MPFR_set_nan(PyObject *self, PyObject *other)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_set_inf,
-"inf(n) -> mpfr\n\n"
-"Return an 'mpfr' initialized to Infinity with the same sign as n.\n"
+"inf(n, /) -> mpfr\n\n"
+"Return an `mpfr` initialized to Infinity with the same sign as n.\n"
 "If n is not given, +Infinity is returned.");
 
 static PyObject *
@@ -378,7 +375,8 @@ GMPy_MPFR_set_inf(PyObject *self, PyObject *args)
     CHECK_CONTEXT(context);
 
     if (PyTuple_Size(args) == 1) {
-        s = c_long_From_Integer(PyTuple_GET_ITEM(args, 0));
+        s = GMPy_Integer_AsLongWithType(PyTuple_GET_ITEM(args, 0), 
+                                        GMPy_ObjectType(PyTuple_GET_ITEM(args, 0)));
         if (s == -1 && PyErr_Occurred()) {
             return NULL;
         }
@@ -391,8 +389,8 @@ GMPy_MPFR_set_inf(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_set_zero,
-"zero(n) -> mpfr\n\n"
-"Return an 'mpfr' inialized to 0.0 with the same sign as n.\n"
+"zero(n, /) -> mpfr\n\n"
+"Return an `mpfr` initialized to 0.0 with the same sign as n.\n"
 "If n is not given, +0.0 is returned.");
 
 static PyObject *
@@ -405,7 +403,8 @@ GMPy_MPFR_set_zero(PyObject *self, PyObject *args)
     CHECK_CONTEXT(context);
 
     if (PyTuple_Size(args) == 1) {
-        s = c_long_From_Integer(PyTuple_GET_ITEM(args, 0));
+        s = GMPy_Integer_AsLongWithType(PyTuple_GET_ITEM(args, 0), 
+                                        GMPy_ObjectType(PyTuple_GET_ITEM(args, 0)));
         if (s == -1 && PyErr_Occurred()) {
             return NULL;
         }
@@ -418,9 +417,9 @@ GMPy_MPFR_set_zero(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_method_integer_ratio,
-"x.as_integer_ratio() -> (num, den)\n\n"
-"Return the exact rational equivalent of an mpfr. Value is a tuple\n"
-"for compatibility with Python's float.as_integer_ratio().");
+"x.as_integer_ratio() -> tuple[mpz, mpz]\n\n"
+"Return the exact rational equivalent of an `mpfr`. Value is a `tuple`\n"
+"for compatibility with Python's `float.as_integer_ratio`.");
 
 /* Note: almost identical code exists in gmpy2_convert_mpfr.c as the
  * function GMPy_MPQ_From_MPFR. They should be refactored.
@@ -449,9 +448,11 @@ GMPy_MPFR_Integer_Ratio_Method(PyObject *self, PyObject *args)
     num = GMPy_MPZ_New(context);
     den = GMPy_MPZ_New(context);
     if (!num || !den) {
+        /* LCOV_EXCL_START */
         Py_XDECREF((PyObject*)num);
         Py_XDECREF((PyObject*)den);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
 
     if (mpfr_zero_p(MPFR(self))) {
@@ -473,15 +474,17 @@ GMPy_MPFR_Integer_Ratio_Method(PyObject *self, PyObject *args)
     }
     result = Py_BuildValue("(NN)", (PyObject*)num, (PyObject*)den);
     if (!result) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)num);
         Py_DECREF((PyObject*)den);
+        /* LCOV_EXCL_STOP */
     }
     return result;
 }
 
 PyDoc_STRVAR(GMPy_doc_method_mantissa_exp,
-"x.as_mantissa_exp() -> (mantissa,exponent)\n\n"
-"Return the mantissa and exponent of an mpfr.");
+"x.as_mantissa_exp() -> tuple[mpz, mpz]\n\n"
+"Return the mantissa and exponent of an `mpfr`.");
 
 static PyObject *
 GMPy_MPFR_Mantissa_Exp_Method(PyObject *self, PyObject *args)
@@ -506,9 +509,11 @@ GMPy_MPFR_Mantissa_Exp_Method(PyObject *self, PyObject *args)
     mantissa = GMPy_MPZ_New(context);
     exponent = GMPy_MPZ_New(context);
     if (!mantissa || !exponent) {
+        /* LCOV_EXCL_START */
         Py_XDECREF((PyObject*)mantissa);
         Py_XDECREF((PyObject*)exponent);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
 
     if (mpfr_zero_p(MPFR(self))) {
@@ -521,14 +526,16 @@ GMPy_MPFR_Mantissa_Exp_Method(PyObject *self, PyObject *args)
     }
     result = Py_BuildValue("(NN)", (PyObject*)mantissa, (PyObject*)exponent);
     if (!result) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)mantissa);
         Py_DECREF((PyObject*)exponent);
+        /* LCOV_EXCL_STOP */
     }
     return result;
 }
 
 PyDoc_STRVAR(GMPy_doc_method_simple_fraction,
-"x.as_simple_fraction([precision=0]) -> mpq\n\n"
+"x.as_simple_fraction(precision=0) -> mpq\n\n"
 "Return a simple rational approximation to x. The result will be\n"
 "accurate to 'precision' bits. If 'precision' is 0, the precision\n"
 "of 'x' will be used.");
@@ -552,7 +559,7 @@ GMPy_MPFR_Simple_Fraction_Method(PyObject *self, PyObject *args, PyObject *keywd
 static PyObject *
 GMPy_MPFR_GetPrec_Attrib(MPFR_Object *self, void *closure)
 {
-    return PyIntOrLong_FromSsize_t((Py_ssize_t)mpfr_get_prec(self->f));
+    return PyLong_FromSsize_t((Py_ssize_t)mpfr_get_prec(self->f));
 }
 
 /* Implement the .rc attribute of an mpfr. */
@@ -560,7 +567,7 @@ GMPy_MPFR_GetPrec_Attrib(MPFR_Object *self, void *closure)
 static PyObject *
 GMPy_MPFR_GetRc_Attrib(MPFR_Object *self, void *closure)
 {
-    return PyIntOrLong_FromLong((long)self->rc);
+    return PyLong_FromLong((long)self->rc);
 }
 
 /* Implement the .imag attribute of an mpfr. */
@@ -587,6 +594,51 @@ GMPy_MPFR_GetReal_Attrib(MPFR_Object *self, void *closure)
     return (PyObject*)self;
 }
 
+static PyObject *
+GMPy_MPFR_Get_Mpmath_MPF_Tuple(MPFR_Object *self, void *closure)
+{
+    long sign;
+    mp_bitcnt_t bc;
+    MPZ_Object *mantissa;
+    MPZ_Object *exponent;
+    mpfr_exp_t temp;
+    PyObject *tuple;
+
+    if (!(tuple = PyTuple_New(4))) {
+        return NULL;
+    }
+
+    mantissa = GMPy_MPZ_New(NULL);
+    exponent = GMPy_MPZ_New(NULL);
+    if (!mantissa || !exponent) {
+        /* LCOV_EXCL_START */
+        Py_XDECREF((PyObject*)mantissa);
+        Py_XDECREF((PyObject*)exponent);
+        return NULL;
+        /* LCOV_EXCL_STOP */
+    }
+
+    if (mpfr_zero_p(MPFR(self))) {
+        mpz_set_ui(MPZ(mantissa), 0);
+        mpz_set_ui(MPZ(exponent), 1);
+    }
+    else {
+        temp = mpfr_get_z_2exp(MPZ(mantissa), MPFR(self));
+        mpz_set_si(MPZ(exponent), temp);
+    }
+
+    sign = mpz_sgn(MPZ(mantissa)) < 0;
+    mpz_abs(MPZ(mantissa), MPZ(mantissa));
+    bc = mpz_sizeinbase(MPZ(mantissa), 2);
+
+    PyTuple_SET_ITEM(tuple, 0, PyLong_FromLong(sign));
+    PyTuple_SET_ITEM(tuple, 1, (PyObject*)mantissa);
+    PyTuple_SET_ITEM(tuple, 2, GMPy_PyLong_From_MPZ(exponent, NULL));
+    PyTuple_SET_ITEM(tuple, 3, GMPy_PyLong_FromMpBitCnt(bc));
+
+    return tuple;
+}
+
 /* Implement the nb_bool slot. */
 
 static int
@@ -596,13 +648,13 @@ GMPy_MPFR_NonZero_Slot(MPFR_Object *self)
 }
 
 PyDoc_STRVAR(GMPy_doc_function_check_range,
-"check_range(x) -> mpfr\n\n"
-"Return a new 'mpfr' with exponent that lies within the current range\n"
+"check_range(x, /) -> mpfr\n\n"
+"Return a new `mpfr` with exponent that lies within the current range\n"
 "of emin and emax.");
 
 PyDoc_STRVAR(GMPy_doc_context_check_range,
-"context.check_range(x) -> mpfr\n\n"
-"Return a new 'mpfr' with exponent that lies within the range of emin\n"
+"context.check_range(x, /) -> mpfr\n\n"
+"Return a new `mpfr` with exponent that lies within the range of emin\n"
 "and emax specified by context.");
 
 static PyObject *
@@ -652,13 +704,13 @@ PyDoc_STRVAR(GMPy_doc_mpfr_sizeof_method,
 static PyObject *
 GMPy_MPFR_SizeOf_Method(PyObject *self, PyObject *other)
 {
-    return PyIntOrLong_FromSize_t(sizeof(MPFR_Object) + \
+    return PyLong_FromSize_t(sizeof(MPFR_Object) + \
         (((MPFR(self))->_mpfr_prec + mp_bits_per_limb - 1) / \
         mp_bits_per_limb) * sizeof(mp_limb_t));
 }
 
 PyDoc_STRVAR(GMPy_doc_method_round10,
-"__round__(x[, n = 0]) -> mpfr\n\n"
+"x.__round__(n = 0, /) -> mpfr\n\n"
 "Return x rounded to n decimal digits before (n < 0) or after (n > 0)\n"
 "the decimal point. Rounds to an integer if n is not specified.");
 
@@ -700,13 +752,8 @@ GMPy_MPFR_Method_Round10(PyObject *self, PyObject *args)
         return self;
     }
 
-    if (PyTuple_GET_SIZE(args) > 1) {
-        TYPE_ERROR("__round__() requires 0 or 1 argument");
-        return NULL;
-    }
-
-    if (PyTuple_GET_SIZE(args) == 1) {
-        digits = PyIntOrLong_AsLong(PyTuple_GET_ITEM(args, 0));
+    if (PyTuple_GET_SIZE(args) >= 1) {
+        digits = PyLong_AsLong(PyTuple_GET_ITEM(args, 0));
         if (digits == -1 && PyErr_Occurred()) {
             TYPE_ERROR("__round__() requires 'int' argument");
             return NULL;
@@ -743,4 +790,3 @@ GMPy_MPFR_Method_Round10(PyObject *self, PyObject *args)
     mpz_clear(temp);
     return((PyObject*)resultf);
 }
-

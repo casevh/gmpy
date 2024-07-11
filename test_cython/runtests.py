@@ -18,7 +18,6 @@ import subprocess
 import sys
 import tempfile
 import os
-from distutils.dir_util import copy_tree
 
 try:
     import Cython
@@ -38,14 +37,19 @@ try:
     dirname = os.path.dirname(__file__)
     if dirname != '':
         os.chdir(dirname)
-    copy_tree('./', tempdir_path)
+    if sys.version_info >= (3, 8):
+        shutil.copytree('./', tempdir_path, dirs_exist_ok=True)
+    else:
+        from distutils.dir_util import copy_tree
+
+        copy_tree('./', tempdir_path)
     os.chdir(tempdir_path)
 
     if subprocess.call([sys.executable, 'setup_cython.py', 'build_ext', '--inplace']):
         raise SystemExit('compilation failed')
 
 
-    if subprocess.call([sys.executable, '-c', 'import test_cython; test_cython.run()']):
+    if subprocess.call([sys.executable, '-c', 'import gmpy2; import test_cython; test_cython.run()']):
         raise SystemExit('cython test failed')
 
 finally:

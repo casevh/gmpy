@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_const.c                                                           *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -27,7 +25,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 PyDoc_STRVAR(GMPy_doc_function_const_pi,
-"const_pi([precision=0]) -> number\n\n"
+"const_pi(precision=0) -> mpfr\n\n"
 "Return the constant pi using the specified precision. If no\n"
 "precision is specified, the default precision is used.");
 
@@ -55,7 +53,7 @@ GMPy_Function_Const_Pi(PyObject *self, PyObject *args, PyObject *keywds)
 }
 
 PyDoc_STRVAR(GMPy_doc_context_const_pi,
-"context.const_pi() -> number\n\n"
+"context.const_pi() -> mpfr\n\n"
 "Return the constant pi using the context's precision.");
 
 static PyObject *
@@ -74,7 +72,7 @@ GMPy_Context_Const_Pi(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_function_const_euler,
-"const_euler([precision=0]) -> number\n\n"
+"const_euler(precision=0) -> mpfr\n\n"
 "Return the euler constant using the specified precision. If no\n"
 "precision is specified, the default precision is used.");
 
@@ -102,7 +100,7 @@ GMPy_Function_Const_Euler(PyObject *self, PyObject *args, PyObject *keywds)
 }
 
 PyDoc_STRVAR(GMPy_doc_context_const_euler,
-"context.const_euler() -> number\n\n"
+"context.const_euler() -> mpfr\n\n"
 "Return the euler constant using the context's precision.");
 
 static PyObject *
@@ -121,7 +119,7 @@ GMPy_Context_Const_Euler(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_function_const_log2,
-"const_log2([precision=0]) -> number\n\n"
+"const_log2(precision=0) -> mpfr\n\n"
 "Return the log2 constant using the specified precision. If no\n"
 "precision is specified, the default precision is used.");
 
@@ -149,7 +147,7 @@ GMPy_Function_Const_Log2(PyObject *self, PyObject *args, PyObject *keywds)
 }
 
 PyDoc_STRVAR(GMPy_doc_context_const_log2,
-"context.const_log2() -> number\n\n"
+"context.const_log2() -> mpfr\n\n"
 "Return the log2 constant using the context's precision.");
 
 static PyObject *
@@ -168,7 +166,7 @@ GMPy_Context_Const_Log2(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_function_const_catalan,
-"const_catalan([precision=0]) -> number\n\n"
+"const_catalan(precision=0) -> mpfr\n\n"
 "Return the catalan constant using the specified precision. If no\n"
 "precision is specified, the default precision is used.");
 
@@ -196,7 +194,7 @@ GMPy_Function_Const_Catalan(PyObject *self, PyObject *args, PyObject *keywds)
 }
 
 PyDoc_STRVAR(GMPy_doc_context_const_catalan,
-"context.const_catalan() -> number\n\n"
+"context.const_catalan() -> mpfr\n\n"
 "Return the catalan constant using the context's precision.");
 
 static PyObject *

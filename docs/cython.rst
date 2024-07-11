@@ -1,6 +1,8 @@
 Cython usage
 ============
 
+.. currentmodule:: gmpy2
+
 The gmpy2 module provides a C-API that can be conveniently used from Cython.
 All types and functions are declared in the header gmpy2.pxd that is installed
 automatically in your Python path together with the library.
@@ -13,9 +15,9 @@ In order to use the C-API you need to make one call to the function **void impor
 Types
 -----
 
-The types **mpz**, **mpq**, **mpfr** and **mpc** are declared as extension
-types in gmpy2.pxd. They correspond respectively to the C structures
-**MPZ_Object**, **MPQ_Object**, **MPFR_Object** and **MPC_Object**.
+The types `mpz`, `mpq`, `mpfr` and `mpc` are
+declared as extension types in gmpy2.pxd. They correspond respectively to the C
+structures **MPZ_Object**, **MPQ_Object**, **MPFR_Object** and **MPC_Object**.
 
 Fast type checking can be done with the following C functions
 
@@ -97,27 +99,9 @@ directories.
 Recall that **import_gmpy2()** needs to be called *before* any other function of
 the C-API.
 
-Here is a minimal example of a Cython file test_gmpy2.pyx
+Here is a minimal example of a Cython file test_gmpy2.pyx:
 
-::
-
-    "A minimal setup.py for compiling test_gmpy2.pyx"
-
-    from distutils.core import setup
-    from distutils.extension import Extension
-    from Cython.Build import cythonize
-    import sys
-
-    ext = Extension("test_gmpy2", ["test_gmpy2.pyx"], include_dirs=sys.path, libraries=['gmp', 'mpfr', 'mpc'])
-
-    setup(
-        name="cython_gmpy_test",
-        ext_modules=cythonize([ext], include_path=sys.path)
-    )
-
-The corresponding setup.py is given below.
-
-::
+.. code-block:: cython
 
     "A minimal cython file test_gmpy2.pyx"
 
@@ -133,11 +117,27 @@ The corresponding setup.py is given below.
 
     print(z + 3)
 
+The corresponding setup.py is given below.
+
+.. code-block:: python
+
+    "A minimal setup.py for compiling test_gmpy2.pyx"
+
+    import sys
+
+    from setuptools import Extension, setup
+    from Cython.Build import cythonize
+
+    ext = Extension("test_gmpy2", ["test_gmpy2.pyx"],
+                    include_dirs=sys.path, libraries=['gmp', 'mpfr', 'mpc'])
+
+    setup(name="cython_gmpy_test",
+          ext_modules=cythonize([ext], include_path=sys.path))
 
 With these two files in the same repository, you should be able to compile your
 module using
 
-::
+.. code-block:: shell
 
     $ python setup.py build_ext --inplace
 

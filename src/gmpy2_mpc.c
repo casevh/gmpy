@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_mpc.c                                                             *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -141,32 +139,23 @@ _GMPy_MPC_Cleanup(MPC_Object **v, CTXT_Object *ctext)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpc,
-"mpc() -> mpc(0.0+0.0j)\n\n"
-"      If no argument is given, return mpc(0.0+0.0j).\n\n"
-"mpc(c [, precision=0]) -> mpc\n\n"
-"      Return a new 'mpc' object from an existing complex number (either\n"
-"      a Python complex object or another 'mpc' object).\n\n"
-"mpc(real [,imag=0 [, precision=0]]) -> mpc\n\n"
-"      Return a new 'mpc' object by converting two non-complex numbers\n"
-"      into the real and imaginary components of an 'mpc' object.\n\n"
-"mpc(s [, precision=0 [, base=10]]) -> mpc\n\n"
-"      Return a new 'mpc' object by converting a string s into a complex\n"
-"      number. If base is omitted, then a base-10 representation is\n"
-"      assumed otherwise the base must be in the interval [2,36].\n\n"
-"Note: The precision can be specified either a single number that\n"
-"      is used for both the real and imaginary components, or as a\n"
-"      tuple that can specify different precisions for the real\n"
-"      and imaginary components.\n\n"
-"      If a precision greater than or equal to 2 is specified, then it\n"
-"      is used.\n\n"
-"      A precision of 0 (the default) implies the precision of the\n"
-"      current context is used.\n\n"
-"      A precision of 1 minimizes the loss of precision by following\n"
-"      these rules:\n"
-"        1) If n is a radix-2 floating point number, then the full\n"
-"           precision of n is retained.\n"
-"        2) If n is an integer, then the precision is the bit length\n"
-"           of the integer.\n" );
+"mpc(c=0, /, precision=0)\n"
+"mpc(c=0, /, precision, context)\n"
+"mpc(real, /, imag=0, precision=0)\n"
+"mpc(real, /, imag, precision, context)\n"
+"mpc(s, /, precision=0, base=10)\n"
+"mpc(s, /, precision, base, context)\n\n"
+"Return a complex floating-point number constructed from a numeric value\n"
+"c or from a pair of two non-complex numbers real and imag or from a\n"
+"string s made of digits in the given base.\n\n"
+"A string can be possibly with real-part and/or imaginary-part (that\n"
+"have 'j' as a suffix), separated by '+' and parsed the same as the\n"
+"`mpfr` constructor does (but the base must be up to 36).\n\n"
+"The precision can be specified by either a single number that is used\n"
+"for both the real and imaginary components, or as a pair of different\n"
+"precisions for the real and imaginary components.  For every component,\n"
+"the meaning of its precision value is the same as in the `mpfr`\n"
+"type constructor.");
 
 static PyMethodDef Pympc_methods[] =
 {
@@ -175,95 +164,31 @@ static PyMethodDef Pympc_methods[] =
     { "__sizeof__", GMPy_MPC_SizeOf_Method, METH_NOARGS, GMPy_doc_mpc_sizeof_method },
     { "conjugate", GMPy_MPC_Conjugate_Method, METH_NOARGS, GMPy_doc_mpc_conjugate_method },
     { "digits", GMPy_MPC_Digits_Method, METH_VARARGS, GMPy_doc_mpc_digits_method },
-    { "is_finite", GMPy_MPC_Is_Finite_Method, METH_NOARGS, GMPy_doc_method_is_finite },
-    { "is_infinite", GMPy_MPC_Is_Infinite_Method, METH_NOARGS, GMPy_doc_method_is_infinite },
-    { "is_nan", GMPy_MPC_Is_NAN_Method, METH_NOARGS, GMPy_doc_method_is_nan },
-    { "is_zero", GMPy_MPC_Is_Zero_Method, METH_NOARGS, GMPy_doc_method_is_zero },
-    { NULL, NULL, 1 }
+    { "is_finite", GMPy_Number_Method_Is_Finite, METH_NOARGS, GMPy_doc_method_is_finite },
+    { "is_infinite", GMPy_Number_Method_Is_Infinite, METH_NOARGS, GMPy_doc_method_is_infinite },
+    { "is_nan", GMPy_Number_Method_Is_NAN, METH_NOARGS, GMPy_doc_method_is_nan },
+    { "is_zero", GMPy_Number_Method_Is_Zero, METH_NOARGS, GMPy_doc_method_is_zero },
+    { NULL }
 };
 
 
-#ifdef PY3
 static PyNumberMethods mpc_number_methods =
 {
-    (binaryfunc) GMPy_MPC_Add_Slot,      /* nb_add                  */
-    (binaryfunc) GMPy_MPC_Sub_Slot,      /* nb_subtract             */
-    (binaryfunc) GMPy_MPC_Mul_Slot,      /* nb_multiply             */
-    (binaryfunc) GMPy_MPC_Mod_Slot,      /* nb_remainder            */
-    (binaryfunc) GMPy_MPC_DivMod_Slot,   /* nb_divmod               */
-    (ternaryfunc) GMPy_MPANY_Pow_Slot,   /* nb_power                */
-    (unaryfunc) GMPy_MPC_Minus_Slot,     /* nb_negative             */
-    (unaryfunc) GMPy_MPC_Plus_Slot,      /* nb_positive             */
-    (unaryfunc) GMPy_MPC_Abs_Slot,       /* nb_absolute             */
-    (inquiry) GMPy_MPC_NonZero_Slot,     /* nb_bool                 */
-        0,                               /* nb_invert               */
-        0,                               /* nb_lshift               */
-        0,                               /* nb_rshift               */
-        0,                               /* nb_and                  */
-        0,                               /* nb_xor                  */
-        0,                               /* nb_or                   */
-    (unaryfunc) GMPy_MPC_Int_Slot,       /* nb_int                  */
-        0,                               /* nb_reserved             */
-    (unaryfunc) GMPy_MPC_Float_Slot,     /* nb_float                */
-        0,                               /* nb_inplace_add          */
-        0,                               /* nb_inplace_subtract     */
-        0,                               /* nb_inplace_multiply     */
-        0,                               /* nb_inplace_remainder    */
-        0,                               /* nb_inplace_power        */
-        0,                               /* nb_inplace_lshift       */
-        0,                               /* nb_inplace_rshift       */
-        0,                               /* nb_inplace_and          */
-        0,                               /* nb_inplace_xor          */
-        0,                               /* nb_inplace_or           */
-    (binaryfunc) GMPy_MPC_FloorDiv_Slot, /* nb_floor_divide         */
-    (binaryfunc) GMPy_MPC_TrueDiv_Slot,  /* nb_true_divide          */
-        0,                               /* nb_inplace_floor_divide */
-        0,                               /* nb_inplace_true_divide  */
-        0,                               /* nb_index                */
+    .nb_add = (binaryfunc) GMPy_Number_Add_Slot,
+    .nb_subtract = (binaryfunc) GMPy_Number_Sub_Slot,
+    .nb_multiply = (binaryfunc) GMPy_Number_Mul_Slot,
+    .nb_remainder = (binaryfunc) GMPy_Number_Mod_Slot,
+    .nb_divmod = (binaryfunc) GMPy_Number_DivMod_Slot,
+    .nb_power = (ternaryfunc) GMPy_Number_Pow_Slot,
+    .nb_negative = (unaryfunc) GMPy_MPC_Minus_Slot,
+    .nb_positive = (unaryfunc) GMPy_MPC_Plus_Slot,
+    .nb_absolute = (unaryfunc) GMPy_MPC_Abs_Slot,
+    .nb_bool = (inquiry) GMPy_MPC_NonZero_Slot,
+    .nb_int = (unaryfunc) GMPy_MPC_Int_Slot,
+    .nb_float = (unaryfunc) GMPy_MPC_Float_Slot,
+    .nb_floor_divide = (binaryfunc) GMPy_Number_FloorDiv_Slot,
+    .nb_true_divide = (binaryfunc) GMPy_Number_TrueDiv_Slot,
 };
-#else
-static PyNumberMethods mpc_number_methods =
-{
-    (binaryfunc) GMPy_MPC_Add_Slot,      /* nb_add                  */
-    (binaryfunc) GMPy_MPC_Sub_Slot,      /* nb_subtract             */
-    (binaryfunc) GMPy_MPC_Mul_Slot,      /* nb_multiply             */
-    (binaryfunc) GMPy_MPC_TrueDiv_Slot,  /* nb_divide               */
-    (binaryfunc) GMPy_MPC_Mod_Slot,      /* nb_remainder            */
-    (binaryfunc) GMPy_MPC_DivMod_Slot,   /* nb_divmod               */
-    (ternaryfunc) GMPy_MPANY_Pow_Slot,   /* nb_power                */
-    (unaryfunc) GMPy_MPC_Minus_Slot,     /* nb_negative             */
-    (unaryfunc) GMPy_MPC_Plus_Slot,      /* nb_positive             */
-    (unaryfunc) GMPy_MPC_Abs_Slot,       /* nb_absolute             */
-    (inquiry) GMPy_MPC_NonZero_Slot,     /* nb_bool                 */
-        0,                               /* nb_invert               */
-        0,                               /* nb_lshift               */
-        0,                               /* nb_rshift               */
-        0,                               /* nb_and                  */
-        0,                               /* nb_xor                  */
-        0,                               /* nb_or                   */
-        0,                               /* nb_coerce               */
-    (unaryfunc) GMPy_MPC_Int_Slot,       /* nb_int                  */
-    (unaryfunc) GMPy_MPC_Long_Slot,      /* nb_long                 */
-    (unaryfunc) GMPy_MPC_Float_Slot,     /* nb_float                */
-        0,                               /* nb_oct                  */
-        0,                               /* nb_hex                  */
-        0,                               /* nb_inplace_add          */
-        0,                               /* nb_inplace_subtract     */
-        0,                               /* nb_inplace_multiply     */
-        0,                               /* nb_inplace_divide       */
-        0,                               /* nb_inplace_remainder    */
-        0,                               /* nb_inplace_power        */
-        0,                               /* nb_inplace_lshift       */
-        0,                               /* nb_inplace_rshift       */
-        0,                               /* nb_inplace_and          */
-        0,                               /* nb_inplace_xor          */
-        0,                               /* nb_inplace_or           */
-    (binaryfunc) GMPy_MPC_FloorDiv_Slot, /* nb_floor_divide         */
-    (binaryfunc) GMPy_MPC_TrueDiv_Slot,  /* nb_true_divide          */
-        0,                               /* nb_inplace_floor_divide */
-        0,                               /* nb_inplace_true_divide  */
-};
-#endif
 
 static PyGetSetDef Pympc_getseters[] =
 {
@@ -276,56 +201,18 @@ static PyGetSetDef Pympc_getseters[] =
 
 static PyTypeObject MPC_Type =
 {
-    /* PyObject_HEAD_INIT(&PyType_Type) */
-#ifdef PY3
     PyVarObject_HEAD_INIT(NULL, 0)
-#else
-    PyObject_HEAD_INIT(0)
-    0,                                      /* ob_size          */
-#endif
-    "mpc",                                  /* tp_name          */
-    sizeof(MPC_Object),                     /* tp_basicsize     */
-        0,                                  /* tp_itemsize      */
-    /* methods */
-    (destructor) GMPy_MPC_Dealloc,          /* tp_dealloc       */
-        0,                                  /* tp_print         */
-        0,                                  /* tp_getattr       */
-        0,                                  /* tp_setattr       */
-        0,                                  /* tp_reserved      */
-    (reprfunc) GMPy_MPC_Repr_Slot,          /* tp_repr          */
-    &mpc_number_methods,                    /* tp_as_number     */
-        0,                                  /* tp_as_sequence   */
-        0,                                  /* tp_as_mapping    */
-    (hashfunc) GMPy_MPC_Hash_Slot,          /* tp_hash          */
-        0,                                  /* tp_call          */
-    (reprfunc) GMPy_MPC_Str_Slot,           /* tp_str           */
-        0,                                  /* tp_getattro      */
-        0,                                  /* tp_setattro      */
-        0,                                  /* tp_as_buffer     */
-#ifdef PY3
-    Py_TPFLAGS_DEFAULT,                     /* tp_flags         */
-#else
-    Py_TPFLAGS_HAVE_RICHCOMPARE|Py_TPFLAGS_CHECKTYPES,  /* tp_flags */
-#endif
-    GMPy_doc_mpc,                           /* tp_doc           */
-        0,                                  /* tp_traverse      */
-        0,                                  /* tp_clear         */
-    (richcmpfunc)&GMPy_RichCompare_Slot,    /* tp_richcompare   */
-        0,                                  /* tp_weaklistoffset*/
-        0,                                  /* tp_iter          */
-        0,                                  /* tp_iternext      */
-    Pympc_methods,                          /* tp_methods       */
-        0,                                  /* tp_members       */
-    Pympc_getseters,                        /* tp_getset        */
-        0,                                  /* tp_base          */
-        0,                                  /* tp_dict          */
-        0,                                  /* tp_descr_get     */
-        0,                                  /* tp_descr_set     */
-        0,                                  /* tp_dictoffset    */
-        0,                                  /* tp_init          */
-        0,                                  /* tp_alloc         */
-    GMPy_MPC_NewInit,                       /* tp_new           */
-        0,                                  /* tp_free          */
+    .tp_name = "mpc",
+    .tp_basicsize = sizeof(MPC_Object),
+    .tp_dealloc = (destructor) GMPy_MPC_Dealloc,
+    .tp_repr = (reprfunc) GMPy_MPC_Repr_Slot,
+    .tp_as_number = &mpc_number_methods,
+    .tp_hash = (hashfunc) GMPy_MPC_Hash_Slot,
+    .tp_str = (reprfunc) GMPy_MPC_Str_Slot,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_doc = GMPy_doc_mpc,
+    .tp_richcompare = (richcmpfunc)&GMPy_RichCompare_Slot,
+    .tp_methods = Pympc_methods,
+    .tp_getset = Pympc_getseters,
+    .tp_new = GMPy_MPC_NewInit,
 };
-
-

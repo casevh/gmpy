@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_mpz_bitops.h                                                      *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -36,12 +34,12 @@ extern "C" {
 static PyObject * GMPy_MPZ_bit_length_function(PyObject *self, PyObject *other);
 static PyObject * GMPy_MPZ_bit_length_method(PyObject *self, PyObject *other);
 static PyObject * GMPy_MPZ_bit_mask(PyObject *self, PyObject *other);
-static PyObject * GMPy_MPZ_bit_scan0_function(PyObject *self, PyObject *args);
-static PyObject * GMPy_MPZ_bit_scan0_method(PyObject *self, PyObject *args);
-static PyObject * GMPy_MPZ_bit_scan1_function(PyObject *self, PyObject *args);
-static PyObject * GMPy_MPZ_bit_scan1_method(PyObject *self, PyObject *args);
+static PyObject * GMPy_MPZ_bit_scan0_function(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
+static PyObject * GMPy_MPZ_bit_scan0_method(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
+static PyObject * GMPy_MPZ_bit_scan1_function(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
+static PyObject * GMPy_MPZ_bit_scan1_method(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
 
-static PyObject * GMPy_MPZ_bit_test_function(PyObject *self, PyObject *args);
+static PyObject * GMPy_MPZ_bit_test_function(PyObject *self, PyObject *const *args, Py_ssize_t nargs);
 static PyObject * GMPy_MPZ_bit_test_method(PyObject *self, PyObject *other);
 static PyObject * GMPy_MPZ_bit_clear_function(PyObject *self, PyObject *args);
 static PyObject * GMPy_MPZ_bit_clear_method(PyObject *self, PyObject *other);

@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy_convert.c                                                          *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -72,6 +70,105 @@ static int GMPy_isComplex(PyObject *obj)
 }
 #endif
 
+/* GMPy_ObjectType(PyObject *obj) returns an integer that identifies the
+ * object's type. See gmpy2_convert.h for details.
+ * 
+ * Exceptions are never raised.
+ */
+
+static inline int GMPy_ObjectType(PyObject *obj)
+{
+    /* Tests are sorted by order by (best guess of) most common argument type.
+     * Tests that require attribute lookups are done last.
+     */
+
+    if (MPZ_Check(obj)) return OBJ_TYPE_MPZ;
+
+    if (MPFR_Check(obj)) return OBJ_TYPE_MPFR;
+
+    if (MPC_Check(obj))  return OBJ_TYPE_MPC;
+    
+    if (MPQ_Check(obj))  return OBJ_TYPE_MPQ;
+
+    if (XMPZ_Check(obj)) return OBJ_TYPE_XMPZ;
+
+    if (PyLong_Check(obj)) return OBJ_TYPE_PyInteger;
+
+    if (PyFloat_Check(obj)) return OBJ_TYPE_PyFloat;
+
+    if (PyComplex_Check(obj)) return OBJ_TYPE_PyComplex;
+
+    if (IS_FRACTION(obj)) return OBJ_TYPE_PyFraction;
+
+    /* Now we look for the presence of __mpz__, __mpq__, __mpfr__, and __mpc__.
+     * Since a type may define more than one of the special methods, we perform
+     * the checks in reverse order.
+     */
+
+    if (HAS_MPC_CONVERSION(obj)) return OBJ_TYPE_HAS_MPC;
+
+    if (HAS_MPFR_CONVERSION(obj)) return OBJ_TYPE_HAS_MPFR;
+
+    if (HAS_MPQ_CONVERSION(obj)) return OBJ_TYPE_HAS_MPQ;
+
+    if (HAS_MPZ_CONVERSION(obj)) return OBJ_TYPE_HAS_MPZ;
+
+    return OBJ_TYPE_UNKNOWN;
+}
+
+static PyObject *
+GMPy_RemoveIgnoredASCII(PyObject *s)
+{
+    PyObject *ascii_str = NULL, *temp = NULL, *filtered = NULL, *symbol = NULL, *blank = NULL;
+
+    if (PyBytes_CheckExact(s)) {
+        temp = PyUnicode_DecodeASCII(PyBytes_AS_STRING(s), PyBytes_GET_SIZE(s), "strict");
+        if (!temp) {
+            VALUE_ERROR("string contains non-ASCII characters");
+            return NULL;
+        }
+    }
+    else if (PyUnicode_Check(s)) {
+        Py_INCREF(s);
+        temp = s;
+    }
+    else {
+        /* LCOV_EXCL_START */
+        TYPE_ERROR("object is not string or Unicode");
+        return NULL;
+        /* LCOV_EXCL_STOP */
+    }
+
+    blank = PyUnicode_FromString("");
+
+    symbol = PyUnicode_FromString(" ");
+    filtered = PyUnicode_Replace(temp, symbol, blank, -1);
+    Py_XDECREF(symbol);
+    Py_XDECREF(temp);
+
+    temp = filtered;
+
+    symbol = PyUnicode_FromString("_");
+    filtered = PyUnicode_Replace(temp, symbol, blank, -1);
+    Py_XDECREF(symbol);
+    Py_XDECREF(temp);
+
+    Py_XDECREF(blank);
+
+    if (!filtered) {
+        return NULL;
+    }
+
+    ascii_str = PyUnicode_AsASCIIString(filtered);
+    Py_DECREF(filtered);
+    if (!ascii_str) {
+        VALUE_ERROR("string contains non-ASCII characters");
+        return NULL;
+    }
+
+    return ascii_str;
+}
+
 /* mpz_set_PyStr converts a Python "string" into a mpz_t structure. It accepts
  * a sequence of bytes (i.e. str in Python 2, bytes in Python 3) or a Unicode
  * string (i.e. unicode in Python 3, str in Python 3). Returns -1 on error,
@@ -79,67 +176,60 @@ static int GMPy_isComplex(PyObject *obj)
  */
 
 static int
-mpz_set_PyStr(mpz_ptr z, PyObject *s, int base)
+mpz_set_PyStr(mpz_t z, PyObject *s, int base)
 {
-    char *cp;
-    Py_ssize_t len, i;
-    PyObject *ascii_str = NULL;
+    char *cp, negative = 0;
+    PyObject *ascii_str;
 
-    if (PyBytes_Check(s)) {
-        len = PyBytes_Size(s);
-        cp = PyBytes_AsString(s);
-    }
-    else if (PyUnicode_Check(s)) {
-        ascii_str = PyUnicode_AsASCIIString(s);
-        if (!ascii_str) {
-            VALUE_ERROR("string contains non-ASCII characters");
-            return -1;
-        }
-        len = PyBytes_Size(ascii_str);
-        cp = PyBytes_AsString(ascii_str);
-    }
-    else {
-        TYPE_ERROR("object is not string or Unicode");
-        return -1;
-    }
+    ascii_str = GMPy_RemoveIgnoredASCII(s);
 
-    /* Don't allow NULL characters */
-    for (i = 0; i < len; i++) {
-        if (cp[i] == '\0') {
-            VALUE_ERROR("string contains NULL characters");
-            Py_XDECREF(ascii_str);
-            return -1;
-        }
+    if (!ascii_str) return -1;
+
+    cp = PyBytes_AsString(ascii_str);
+
+    if (cp[0] == '+') cp++;
+    if (cp[0] == '-') {
+        cp++;
+        negative = 1;
     }
 
     /* Check for leading base indicators. */
-    if (base == 0) {
-        if (len > 2 && cp[0] == '0') {
-            if (cp[1] == 'b')      { base = 2;  cp += 2; }
-            else if (cp[1] == 'o') { base = 8;  cp += 2; }
-            else if (cp[1] == 'x') { base = 16; cp += 2; }
-            else                   { base = 10; }
+    if (cp[0] == '0' && cp[1] != '\0') {
+        if (base == 0) {
+            /* GMP uses prefix '0' for octal, so set base here. */
+            if (tolower(cp[1]) == 'o') {
+                base = 8;
+                cp += 2;
+            }
+            else if (tolower(cp[1]) != 'b' && tolower(cp[1]) != 'x') {
+                base = 10;
+            }
         }
         else {
-            base = 10;
+            /* If the specified base matches the leading base indicators,
+             * then we need to skip the base indicators.
+             */
+            if ((tolower(cp[1]) == 'b' && base ==  2) ||
+                (tolower(cp[1]) == 'o' && base ==  8) ||
+                (tolower(cp[1]) == 'x' && base == 16))
+            {
+                cp += 2;
+            }
         }
     }
-    else if (cp[0] == '0') {
-        /* If the specified base matches the leading base indicators, then
-         * we need to skip the base indicators.
-         */
-        if (cp[1] =='b' && base == 2)       { cp += 2; }
-        else if (cp[1] =='o' && base == 8)  { cp += 2; }
-        else if (cp[1] =='x' && base == 16) { cp += 2; }
-    }
 
-    /* delegate rest to GMP's _set_str function */
+    while (cp[0] == '0' && cp[1] != '\0' && base != 0) cp++;
+
+    /* delegate rest to GMP's function */
     if (-1 == mpz_set_str(z, cp, base)) {
         VALUE_ERROR("invalid digits");
-        Py_XDECREF(ascii_str);
+        Py_DECREF(ascii_str);
         return -1;
     }
-    Py_XDECREF(ascii_str);
+    if (negative) {
+        mpz_neg(z, z);
+    }
+    Py_DECREF(ascii_str);
     return 1;
 }
 
@@ -226,12 +316,8 @@ mpz_ascii(mpz_t z, int base, int option, int which)
         else if (base == -16) { *(p++) = '0'; *(p++) = 'X'; }
     }
     else if (!(option & 24)) {
-    #ifdef PY2
-        if (base == 8)        { *(p++) = '0'; }
-    #else
         if (base == 2)        { *(p++) = '0'; *(p++) = 'b'; }
         else if (base == 8)   { *(p++) = '0'; *(p++) = 'o'; }
-    #endif
         else if (base == 16)  { *(p++) = '0'; *(p++) = 'x'; }
         else if (base == -16) { *(p++) = '0'; *(p++) = 'X'; }
     }
@@ -244,7 +330,7 @@ mpz_ascii(mpz_t z, int base, int option, int which)
         *(p++) = ')';
     *(p++) = '\00';
 
-    result = Py_BuildValue("s", buffer);
+    result = PyUnicode_FromString(buffer);
     if (negative == 1) {
         mpz_neg(z, z);
     }

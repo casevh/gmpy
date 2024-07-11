@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_mpz_pack.c                                                        *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -39,9 +37,9 @@
  */
 
 PyDoc_STRVAR(doc_pack,
-"pack(lst, n) -> mpz\n\n"
-"Pack a list of integers 'lst' into a single 'mpz' by concatenating\n"
-"each integer element of 'lst' after padding to length n bits. Raises\n"
+"pack(lst, n, /) -> mpz\n\n"
+"Pack a list of integers lst into a single `mpz` by concatenating\n"
+"each integer element of lst after padding to length n bits. Raises\n"
 "an error if any integer is negative or greater than n bits in\n"
 "length.");
 
@@ -49,7 +47,8 @@ static PyObject *
 GMPy_MPZ_pack(PyObject *self, PyObject *args)
 {
     mp_bitcnt_t nbits, total_bits, tempx_bits;
-    Py_ssize_t index, lst_count, i, temp_bits, limb_count;
+    mp_size_t i;
+    Py_ssize_t index, lst_count, temp_bits, limb_count;
     PyObject *lst;
     mpz_t temp, temp1;
     MPZ_Object *result, *tempx = 0;
@@ -60,7 +59,7 @@ GMPy_MPZ_pack(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    nbits = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 1));
+    nbits = GMPy_Integer_AsMpBitCnt(PyTuple_GET_ITEM(args, 1));
     if (nbits == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
         return NULL;
     }
@@ -116,7 +115,7 @@ GMPy_MPZ_pack(PyObject *self, PyObject *args)
             temp_bits -= mp_bits_per_limb;
         }
         if (temp_bits > 0) {
-            mpz_tdiv_q_2exp(temp, temp, mp_bits_per_limb * i);
+            mpz_tdiv_q_2exp(temp, temp, mp_bits_per_limb * (mp_bitcnt_t)i);
         }
         else {
             mpz_set_ui(temp, 0);
@@ -131,15 +130,16 @@ GMPy_MPZ_pack(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(doc_unpack,
-"unpack(x, n) -> list\n\n"
-"Unpack an integer 'x' into a list of n-bit values. Equivalent to\n"
-"repeated division by 2**n. Raises error if 'x' is negative.");
+"unpack(x, n, /) -> list\n\n"
+"Unpack an integer x into a list of n-bit values. Equivalent to\n"
+"repeated division by 2**n. Raises error if x is negative.");
 
 static PyObject *
 GMPy_MPZ_unpack(PyObject *self, PyObject *args)
 {
     mp_bitcnt_t nbits, total_bits, guard_bit, extra_bits, temp_bits;
-    Py_ssize_t index = 0, lst_count, i, lst_ptr = 0;
+    mp_size_t index = 0;
+    Py_ssize_t lst_count, i, lst_ptr = 0;
     PyObject *result;
     mpz_t temp;
     mp_limb_t extra = 0;
@@ -151,7 +151,7 @@ GMPy_MPZ_unpack(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    nbits = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 1));
+    nbits = GMPy_Integer_AsMpBitCnt(PyTuple_GET_ITEM(args, 1));
     if (nbits == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
         return NULL;
     }
@@ -179,15 +179,19 @@ GMPy_MPZ_unpack(PyObject *self, PyObject *args)
     }
 
     if (!(result = PyList_New(lst_count))) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)tempx);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
 
     if (mpz_sgn(tempx->z) == 0) {
         if (!(item = GMPy_MPZ_New(context))) {
+            /* LCOV_EXCL_START */
             Py_DECREF((PyObject*)tempx);
             Py_DECREF(result);
             return NULL;
+            /* LCOV_EXCL_STOP */
         }
         mpz_set_ui(item->z, 0);
         PyList_SET_ITEM(result, 0, (PyObject*)item);
@@ -216,16 +220,18 @@ GMPy_MPZ_unpack(PyObject *self, PyObject *args)
             temp->_mp_d[0] = extra;
         }
         else {
-           mpn_add_1(temp->_mp_d, temp->_mp_d, mpz_size(temp), extra);
+           mpn_add_1(temp->_mp_d, temp->_mp_d, (mp_size_t)mpz_size(temp), extra);
         }
         temp_bits += extra_bits;
 
         while ((lst_ptr < lst_count) && (temp_bits >= nbits)) {
             if(!(item = GMPy_MPZ_New(context))) {
+                /* LCOV_EXCL_START */
                 mpz_clear(temp);
                 Py_DECREF((PyObject*)tempx);
                 Py_DECREF(result);
                 return NULL;
+                /* LCOV_EXCL_STOP */
             }
             mpz_tdiv_r_2exp(item->z, temp, nbits);
             PyList_SET_ITEM(result, lst_ptr++, (PyObject*)item);
@@ -239,5 +245,3 @@ GMPy_MPZ_unpack(PyObject *self, PyObject *args)
     mpz_clear(temp);
     return result;
 }
-
-

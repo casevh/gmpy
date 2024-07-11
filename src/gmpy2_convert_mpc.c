@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_convert_mpc.c                                                     *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -37,12 +35,11 @@ GMPy_MPC_From_MPC(MPC_Object *obj, mpfr_prec_t rprec, mpfr_prec_t iprec,
 {
     MPC_Object *result = NULL;
 
-    assert(MPC_Check(obj));
-
     /* Optimize the critical case when prec==1 or obj is NaN or Inf. */
 
     if ((rprec == 1 && iprec == 1) ||
-        (!mpfr_number_p(mpc_realref(obj->c)) && !mpfr_number_p(mpc_imagref(obj->c)))) {
+        (!mpfr_number_p(mpc_realref(obj->c)) &&
+        !mpfr_number_p(mpc_imagref(obj->c)))) {
         Py_INCREF((PyObject*)obj);
         return obj;
     }
@@ -91,8 +88,6 @@ GMPy_MPC_From_PyComplex(PyObject *obj, mpfr_prec_t rprec, mpfr_prec_t iprec,
 {
     MPC_Object *result;
 
-    assert(PyComplex_Check(obj));
-
     CHECK_CONTEXT(context);
 
     if (rprec == 0)
@@ -122,8 +117,6 @@ GMPy_MPC_From_MPFR(MPFR_Object *obj, mpfr_prec_t rprec, mpfr_prec_t iprec,
                    CTXT_Object *context)
 {
     MPC_Object *result;
-
-    assert(MPFR_Check(obj));
 
     CHECK_CONTEXT(context);
 
@@ -156,8 +149,6 @@ GMPy_MPC_From_PyFloat(PyObject *obj, mpfr_prec_t rprec, mpfr_prec_t iprec,
 
     CHECK_CONTEXT(context);
 
-    assert(PyFloat_Check(obj));
-
     if (rprec == 0)
         rprec = GET_REAL_PREC(context);
     else if (rprec == 1)
@@ -186,8 +177,6 @@ GMPy_MPC_From_MPZ(MPZ_Object *obj, mpfr_prec_t rprec, mpfr_prec_t iprec,
 {
     MPC_Object *result = NULL;
 
-    assert(CHECK_MPZANY(obj));
-
     CHECK_CONTEXT(context);
 
     if (rprec < 2) {
@@ -214,8 +203,6 @@ GMPy_MPC_From_MPQ(MPQ_Object *obj, mpfr_prec_t rprec, mpfr_prec_t iprec,
                   CTXT_Object *context)
 {
     MPC_Object *result = NULL;
-
-    assert(MPQ_Check(obj));
 
     CHECK_CONTEXT(context);
 
@@ -245,8 +232,6 @@ GMPy_MPC_From_Fraction(PyObject *obj, mpfr_prec_t rprec, mpfr_prec_t iprec,
     MPC_Object *result = NULL;
     MPQ_Object *tempq;
 
-    assert(IS_RATIONAL(obj));
-
     CHECK_CONTEXT(context);
 
     if ((tempq = GMPy_MPQ_From_Fraction(obj, context))) {
@@ -257,17 +242,15 @@ GMPy_MPC_From_Fraction(PyObject *obj, mpfr_prec_t rprec, mpfr_prec_t iprec,
 }
 
 static MPC_Object *
-GMPy_MPC_From_PyIntOrLong(PyObject *obj, mpfr_prec_t rprec, mpfr_prec_t iprec,
+GMPy_MPC_From_PyLong(PyObject *obj, mpfr_prec_t rprec, mpfr_prec_t iprec,
                           CTXT_Object *context)
 {
     MPC_Object *result = NULL;
     MPZ_Object *tempz;
 
-    assert(PyIntOrLong_Check(obj));
-
     CHECK_CONTEXT(context);
 
-    if ((tempz = GMPy_MPZ_From_PyIntOrLong(obj, context))) {
+    if ((tempz = GMPy_MPZ_From_PyLong(obj, context))) {
         result = GMPy_MPC_From_MPZ(tempz, rprec, iprec, context);
         Py_DECREF((PyObject*)tempz);
     }
@@ -289,48 +272,37 @@ GMPy_MPC_From_PyStr(PyObject *s, int base, mpfr_prec_t rprec, mpfr_prec_t iprec,
                     CTXT_Object *context)
 {
     MPC_Object *result;
-    PyObject *ascii_str = NULL;
     Py_ssize_t len;
-    char *cp, *unwind, *tempchar, *lastchar;
-    int firstp = 0, lastp = 0, real_rc = 0, imag_rc = 0;
+    char *cp = NULL, *unwind, *tempchar, *lastchar;
+    int firstp = 0, lastp = 0, real_rc = 0, imag_rc = 0, rc = 0;
+    PyObject *ascii_str = NULL;
+
+    if (PyUnicode_Check(s))
+        cp = (char*)PyUnicode_AsUTF8AndSize(s, &len);
 
     CHECK_CONTEXT(context);
 
-    if (PyBytes_Check(s)) {
-        len = PyBytes_Size(s);
-        cp = (char*)PyBytes_AsString(s);
-    }
-    else if (PyUnicode_Check(s)) {
-        ascii_str = PyUnicode_AsASCIIString(s);
-        if (!ascii_str) {
-            VALUE_ERROR("string contains non-ASCII characters");
-            return NULL;
+    if (!(result = GMPy_MPC_New(rprec, iprec, context)))
+        return NULL;
+
+    if (cp && *cp == '(') {
+        rc = mpc_strtoc(result->c, cp, &tempchar, base, GET_MPC_ROUND(context));
+        if (tempchar > cp + len - 1) {
+            result->rc = MPC_INEX1(rc);
+            return result;
         }
-        len = PyBytes_Size(ascii_str);
-        cp = (char*)PyBytes_AsString(ascii_str);
-    }
-    else {
-        TYPE_ERROR("string required");
-        return NULL;
     }
 
-    /* Don't allow NULL characters */
-    if ((Py_ssize_t)strlen(cp) != len) {
-        VALUE_ERROR("string without NULL characters expected");
-        Py_XDECREF(ascii_str);
-        return NULL;
-    }
+    ascii_str = GMPy_RemoveIgnoredASCII(s);
 
-    if (!(result = GMPy_MPC_New(rprec, iprec, context))) {
-        Py_XDECREF(ascii_str);
+    if (!ascii_str)
         return NULL;
-    }
 
-    /* Get a pointer to the last valid character (ignoring trailing
-     * whitespace.) */
+    cp = (char*)PyBytes_AsString(ascii_str);
+    len = PyBytes_Size(ascii_str);
+
+    /* Get a pointer to the last valid character */
     lastchar = cp + len - 1;
-    while (isspace(*lastchar))
-        lastchar--;
 
     /* Skip trailing ). */
     if (*lastchar == ')') {
@@ -341,10 +313,6 @@ GMPy_MPC_From_PyStr(PyObject *s, int base, mpfr_prec_t rprec, mpfr_prec_t iprec,
     /* Skip trailing j. */
     if (*lastchar == 'j')
         lastchar--;
-
-    /* Skip leading whitespace. */
-    while (isspace(*cp))
-        cp++;
 
     /* Skip a leading (. */
     if (*cp == '(') {
@@ -408,36 +376,36 @@ GMPy_MPC_From_PyStr(PyObject *s, int base, mpfr_prec_t rprec, mpfr_prec_t iprec,
 /* See the comments for GMPy_MPFR_From_Real_Temp. */
 
 static MPC_Object *
-GMPy_MPC_From_Complex(PyObject* obj, mp_prec_t rprec, mp_prec_t iprec,
-                           CTXT_Object *context)
+GMPy_MPC_From_ComplexWithType(PyObject* obj, int xtype, mp_prec_t rprec, 
+                              mp_prec_t iprec, CTXT_Object *context)
 {
     CHECK_CONTEXT(context);
 
-    if (MPC_Check(obj))
+    if (IS_TYPE_MPC(xtype))
         return GMPy_MPC_From_MPC((MPC_Object*)obj, rprec, iprec, context);
 
-    if (MPFR_Check(obj))
+    if (IS_TYPE_MPFR(xtype))
         return GMPy_MPC_From_MPFR((MPFR_Object*)obj, rprec, iprec, context);
 
-    if (PyFloat_Check(obj))
+    if (IS_TYPE_PyFloat(xtype))
         return GMPy_MPC_From_PyFloat(obj, rprec, iprec, context);
 
-    if (PyComplex_Check(obj))
+    if (IS_TYPE_PyComplex(xtype))
         return GMPy_MPC_From_PyComplex(obj, rprec, iprec, context);
 
-    if (MPQ_Check(obj))
+    if (IS_TYPE_MPQ(xtype))
         return GMPy_MPC_From_MPQ((MPQ_Object*)obj, rprec, iprec, context);
 
-    if (MPZ_Check(obj) || XMPZ_Check(obj))
+    if (IS_TYPE_MPZANY(xtype))
         return GMPy_MPC_From_MPZ((MPZ_Object*)obj, rprec, iprec, context);
 
-    if (PyIntOrLong_Check(obj))
-        return GMPy_MPC_From_PyIntOrLong(obj, rprec, iprec, context);
+    if (IS_TYPE_PyInteger(xtype))
+        return GMPy_MPC_From_PyLong(obj, rprec, iprec, context);
 
-    if (IS_FRACTION(obj))
+    if (IS_TYPE_PyFraction(xtype))
         return GMPy_MPC_From_Fraction(obj, rprec, iprec, context);
 
-    if (HAS_MPC_CONVERSION(obj)) {
+    if (IS_TYPE_HAS_MPC(xtype)) {
         MPC_Object * res = (MPC_Object *) PyObject_CallMethod(obj, "__mpc__", NULL);
 
         if (res != NULL && MPC_Check(res)) {
@@ -449,7 +417,7 @@ GMPy_MPC_From_Complex(PyObject* obj, mp_prec_t rprec, mp_prec_t iprec,
         }
     }
 
-    if (HAS_MPFR_CONVERSION(obj)) {
+    if (IS_TYPE_HAS_MPFR(xtype)) {
         MPFR_Object * res = (MPFR_Object *) PyObject_CallMethod(obj, "__mpfr__", NULL);
 
         if (res != NULL && MPFR_Check(res)) {
@@ -463,7 +431,7 @@ GMPy_MPC_From_Complex(PyObject* obj, mp_prec_t rprec, mp_prec_t iprec,
         }
     }
 
-    if (HAS_MPQ_CONVERSION(obj)) {
+    if (IS_TYPE_HAS_MPQ(xtype)) {
         MPQ_Object * res = (MPQ_Object *) PyObject_CallMethod(obj, "__mpq__", NULL);
 
         if (res != NULL && MPQ_Check(res)) {
@@ -477,7 +445,7 @@ GMPy_MPC_From_Complex(PyObject* obj, mp_prec_t rprec, mp_prec_t iprec,
         }
     }
 
-    if (HAS_MPZ_CONVERSION(obj)) {
+    if (IS_TYPE_HAS_MPZ(xtype)) {
         MPZ_Object * res = (MPZ_Object *) PyObject_CallMethod(obj, "__mpz__", NULL);
 
         if (res != NULL && MPZ_Check(res)) {
@@ -496,14 +464,21 @@ GMPy_MPC_From_Complex(PyObject* obj, mp_prec_t rprec, mp_prec_t iprec,
     return NULL;
 }
 
-#if 0
 static MPC_Object *
-GMPy_MPC_From_ComplexAndCopy(PyObject* obj, mp_prec_t rprec, mp_prec_t iprec,
+GMPy_MPC_From_Complex(PyObject* obj, mp_prec_t rprec, mp_prec_t iprec,
                            CTXT_Object *context)
+{
+    return GMPy_MPC_From_ComplexWithType(obj, GMPy_ObjectType(obj),
+                                         rprec, iprec, context);
+}
+
+static MPC_Object *
+GMPy_MPC_From_ComplexWithTypeAndCopy(PyObject* obj, int xtype, mp_prec_t rprec,
+                                     mp_prec_t iprec, CTXT_Object *context)
 {
     MPC_Object *result = NULL, *temp = NULL;
 
-    result = GMPy_MPC_From_Complex(obj, rprec, iprec, context);
+    result = GMPy_MPC_From_ComplexWithType(obj, xtype, rprec, iprec, context);
 
     if (result == NULL)
         return result;
@@ -515,6 +490,7 @@ GMPy_MPC_From_ComplexAndCopy(PyObject* obj, mp_prec_t rprec, mp_prec_t iprec,
                               iprec = mpfr_get_prec(mpc_imagref(result->c)),
                               context))) {
         /* LCOV_EXCL_START */
+        Py_DECREF(result);
         return NULL;
         /* LCOV_EXCL_STOP */
     }
@@ -527,7 +503,6 @@ GMPy_MPC_From_ComplexAndCopy(PyObject* obj, mp_prec_t rprec, mp_prec_t iprec,
     Py_DECREF((PyObject*)result);
     return temp;
 }
-#endif
 
 static PyObject *
 GMPy_PyStr_From_MPC(MPC_Object *self, int base, int digits, CTXT_Object *context)
@@ -587,15 +562,6 @@ GMPy_PyComplex_From_MPC(PyObject *self, PyObject *other)
     return PyComplex_FromDoubles(real, imag);
 }
 
-#ifdef PY2
-static PyObject *
-GMPy_MPC_Long_Slot(PyObject *self)
-{
-    TYPE_ERROR("can't covert mpc to long");
-    return NULL;
-}
-#endif
-
 static PyObject *
 GMPy_MPC_Int_Slot(PyObject *self)
 {
@@ -639,7 +605,7 @@ GMPy_MPC_Str_Slot(MPC_Object *self)
 
     sprintf(fmtstr, "{0:.%ld.%ldg}", rprec, iprec);
 
-    temp = Py_BuildValue("s", fmtstr);
+    temp = PyUnicode_FromString(fmtstr);
     if (!temp)
         return NULL;
     result = PyObject_CallMethod(temp, "format", "O", self);
@@ -665,13 +631,10 @@ GMPy_MPC_Repr_Slot(MPC_Object *self)
     else
         sprintf(fmtstr, "mpc('{0:.%ld.%ldg}')", rprec, iprec);
 
-    temp = Py_BuildValue("s", fmtstr);
+    temp = PyUnicode_FromString(fmtstr);
     if (!temp)
         return NULL;
     result = PyObject_CallMethod(temp, "format", "O", self);
     Py_DECREF(temp);
     return result;
 }
-
-
-

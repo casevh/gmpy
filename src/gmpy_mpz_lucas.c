@@ -1,13 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy_mpz_lucas.c                                                        *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
  * Copyright 2011 David Cleaver                                            *
  *                                                                         *
- * Copyright 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019,               *
- *           2020 Case Van Horsen                                          *
+ * Copyright 2012 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * The original file is available at:                                      *
  *   <http://sourceforge.net/projects/mpzlucas/files/>                     *
@@ -31,14 +30,15 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 PyDoc_STRVAR(doc_mpz_lucasu,
-"lucasu(p,q,k) -> mpz\n\n"
+"lucasu(p,q,k,/) -> mpz\n\n"
 "Return the k-th element of the Lucas U sequence defined by p,q.\n"
 "p*p - 4*q must not equal 0; k must be greater than or equal to 0.");
 
 static PyObject *
 GMPY_mpz_lucasu(PyObject *self, PyObject *args)
 {
-    /* Adaptation of algorithm found in http://joye.site88.net/papers/JQ96lucas.pdf
+    /* Adaptation of algorithm found in
+     * https://web.archive.org/web/20150202074230/http://joye.site88.net/papers/JQ96lucas.pdf
      * calculate u[k] of Lucas U sequence for p,q.
      * Note: p^2-4q=0 is not tested, not a proper Lucas sequence!!
      */
@@ -90,6 +90,11 @@ GMPY_mpz_lucasu(PyObject *self, PyObject *args)
     mpz_set_si(ql, 1);
     mpz_set_si(qh, 1);
     mpz_set_si(tmp, 0);
+
+    if (mpz_sgn(k->z) == 0) {
+        mpz_set_si(uh, 0);
+        goto end;
+    }
 
     s = mpz_scan1(k->z, 0);
     for (j = mpz_sizeinbase(k->z,2)-1; j >= s+1; j--) {
@@ -162,6 +167,7 @@ GMPY_mpz_lucasu(PyObject *self, PyObject *args)
         mpz_mul(ql, ql, ql);
     }
 
+  end:
     if (!(result = GMPy_MPZ_New(NULL)))
         goto cleanup;
 
@@ -183,7 +189,7 @@ GMPY_mpz_lucasu(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(doc_mpz_lucasu_mod,
-"lucasu_mod(p,q,k,n) -> mpz\n\n"
+"lucasu_mod(p,q,k,n,/) -> mpz\n\n"
 "Return the k-th element of the Lucas U sequence defined by p,q (mod n).\n"
 "p*p - 4*q must not equal 0; k must be greater than or equal to 0;\n"
 "n must be greater than 0.");
@@ -252,6 +258,11 @@ GMPY_mpz_lucasu_mod(PyObject *self, PyObject *args)
     mpz_set_si(ql, 1);
     mpz_set_si(qh, 1);
     mpz_set_si(tmp, 0);
+
+    if (mpz_sgn(k->z) == 0) {
+        mpz_set_si(uh, 0);
+        goto end;
+    }
 
     s = mpz_scan1(k->z, 0);
     for (j = mpz_sizeinbase(k->z,2)-1; j >= s+1; j--) {
@@ -334,6 +345,7 @@ GMPY_mpz_lucasu_mod(PyObject *self, PyObject *args)
         mpz_mod(ql, ql, n->z);
     }
 
+  end:
     if (!(result = GMPy_MPZ_New(NULL)))
         goto cleanup;
 
@@ -356,7 +368,7 @@ GMPY_mpz_lucasu_mod(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(doc_mpz_lucasv,
-"lucasv(p,q,k) -> mpz\n\n"
+"lucasv(p,q,k,/) -> mpz\n\n"
 "Return the k-th element of the Lucas V sequence defined by p,q.\n"
 "p*p - 4*q must not equal 0; k must be greater than or equal to 0.");
 
@@ -413,6 +425,10 @@ GMPY_mpz_lucasv(PyObject *self, PyObject *args)
     mpz_set_si(ql, 1);
     mpz_set_si(qh, 1);
     mpz_set_si(tmp,0);
+
+    if (mpz_sgn(k->z) == 0) {
+        goto end;
+    }
 
     s = mpz_scan1(k->z, 0);
     for (j = mpz_sizeinbase(k->z,2)-1; j >= s+1; j--) {
@@ -471,6 +487,7 @@ GMPY_mpz_lucasv(PyObject *self, PyObject *args)
         mpz_mul(ql, ql, ql);
     }
 
+  end:
     if (!(result = GMPy_MPZ_New(NULL)))
         goto cleanup;
 
@@ -491,7 +508,7 @@ GMPY_mpz_lucasv(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(doc_mpz_lucasv_mod,
-"lucasv_mod(p,q,k,n) -> mpz\n\n"
+"lucasv_mod(p,q,k,n,/) -> mpz\n\n"
 "Return the k-th element of the Lucas V sequence defined by p,q (mod n).\n"
 "p*p - 4*q must not equal 0; k must be greater than or equal to 0;\n"
 "n must be greater than 0.");
@@ -559,6 +576,10 @@ GMPY_mpz_lucasv_mod(PyObject *self, PyObject *args)
     mpz_set_si(qh, 1);
     mpz_set_si(tmp,0);
 
+    if (mpz_sgn(k->z) == 0) {
+        goto end;
+    }
+
     s = mpz_scan1(k->z, 0);
     for (j = mpz_sizeinbase(k->z,2)-1; j >= s+1; j--) {
         /* ql = ql*qh (mod n) */
@@ -623,6 +644,7 @@ GMPY_mpz_lucasv_mod(PyObject *self, PyObject *args)
         mpz_mod(ql, ql, n->z);
     }
 
+  end:
     if (!(result = GMPy_MPZ_New(NULL)))
         goto cleanup;
 

@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy_convert_utils.h                                                    *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -37,39 +35,25 @@ extern "C" {
  * Conversion between Integer objects and C types.                          *
  * ======================================================================== */
 
-static long                  GMPy_Integer_AsLongAndError(PyObject *vv, int *error);
-static unsigned long         GMPy_Integer_AsUnsignedLongAndError(PyObject *vv, int *error);
-static long                  c_long_From_Integer(PyObject *obj);
-static unsigned long         c_ulong_From_Integer(PyObject *obj);
+static long            GMPy_Integer_AsLongWithType(PyObject *x, int xtype);
+static long            GMPy_Integer_AsLong(PyObject *x);
+static unsigned long   GMPy_Integer_AsUnsignedLongWithType(PyObject *x, int xtype);
+static unsigned long   GMPy_Integer_AsUnsignedLong(PyObject *x);
+static long            GMPy_Integer_AsUnsignedLongOrLong(PyObject *x, int *is_signed);
 
-#ifdef _WIN64
-static PY_LONG_LONG          GMPy_Integer_AsLongLongAndError(PyObject *vv, int *error);
-static unsigned PY_LONG_LONG GMPy_Integer_AsUnsignedLongLongAndError(PyObject *vv, int *error);
-#endif
+static PY_LONG_LONG    GMPy_Integer_AsLongLongWithType(PyObject *x, int xtype);
+static PY_LONG_LONG    GMPy_Integer_AsLongLong(PyObject *x);
 
-/* Support conversion to/from mp_bitcnt_t and Py_ssize_t. */
+static mp_bitcnt_t     GMPy_Integer_AsMpBitCnt(PyObject *x);
+static mp_bitcnt_t     GMPy_PyLong_AsMpBitCnt(PyObject *x);
+static PyObject *      GMPy_PyLong_FromMpBitCnt(mp_bitcnt_t n);
 
-#if defined _WIN64 && MPIR
-# define mp_bitcnt_t_From_Integer c_ulonglong_From_Integer
-# define GMPy_Integer_AsMpBitCntAndError GMPy_Integer_AsUnsignedLongLongAndError
-#else
-# define mp_bitcnt_t_From_Integer c_ulong_From_Integer
-# define GMPy_Integer_AsMpBitCntAndError GMPy_Integer_AsUnsignedLongAndError
-#endif
+static unsigned PY_LONG_LONG GMPy_Integer_AsUnsignedLongLongWithType(PyObject *x, int xtype);
+static unsigned PY_LONG_LONG GMPy_Integer_AsUnsignedLongLong(PyObject *x);
 
-/* This just requires that sizeof(mp_bitcnt_t) <= sizeof(size_t) */
+#define GMPy_Integer_AsSsize_t (Py_ssize_t)GMPy_Integer_AsLongLong
 
-#ifdef _WIN64
-# define ssize_t_From_Integer c_longlong_From_Integer
-#else
-# define ssize_t_From_Integer c_long_From_Integer
-#endif
-
-#ifdef PY2
-# define PyIntOrLong_FromMpBitCnt PyInt_FromSize_t
-#else
-# define PyIntOrLong_FromMpBitCnt PyLong_FromSize_t
-#endif
+static mp_bitcnt_t GMPy_Integer_AsMpBitCnt(PyObject *x);
 
 #ifdef __cplusplus
 }

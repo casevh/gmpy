@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_plus.h                                                             *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -39,10 +37,10 @@ static PyObject * GMPy_Number_Plus(PyObject *x, CTXT_Object *context);
 
 /* Private API */
 
-static PyObject * GMPy_Integer_Plus(PyObject *x, CTXT_Object *context);
-static PyObject * GMPy_Rational_Plus(PyObject *x, CTXT_Object *context);
-static PyObject * GMPy_Real_Plus(PyObject *x, CTXT_Object *context);
-static PyObject * GMPy_Complex_Plus(PyObject *x, CTXT_Object *context);
+static PyObject * GMPy_Integer_PlusWithType(PyObject *x, int xtype, CTXT_Object *context);
+static PyObject * GMPy_Rational_PlusWithType(PyObject *x, int xtype, CTXT_Object *context);
+static PyObject * GMPy_Real_PlusWithType(PyObject *x, int xtype, CTXT_Object *context);
+static PyObject * GMPy_Complex_PlusWithType(PyObject *x, int xtype, CTXT_Object *context);
 
 static PyObject * GMPy_MPZ_Plus_Slot(MPZ_Object *x);
 static PyObject * GMPy_MPQ_Plus_Slot(MPQ_Object *x);

@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_types.h                                                           *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -89,23 +87,13 @@ typedef struct {
     mpfr_rnd_t imag_round;   /* current rounding mode for Im(MPC) */
     int allow_complex;       /* if 1, allow mpfr functions to return an mpc */
     int rational_division;   /* if 1, mpz/mpz returns an mpq result */
+    int allow_release_gil;   /* if 1, release GIL for mpz operations */
 } gmpy_context;
 
 typedef struct {
     PyObject_HEAD
     gmpy_context ctx;
-#ifndef WITHOUT_THREADS
-    PyThreadState *tstate;
-#endif
 } CTXT_Object;
-
-typedef struct {
-    PyObject_HEAD
-    CTXT_Object *new_context; /* Context that will be returned when
-                               * __enter__ is called. */
-    CTXT_Object *old_context; /* Context that will restored when
-                               * __exit__ is called. */
-} CTXT_Manager_Object;
 
 
 #ifdef __cplusplus

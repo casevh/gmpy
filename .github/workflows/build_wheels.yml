@@ -1,11 +1,6 @@
 name: Build Wheels
 
-on:
-  push:
-    branches:
-      - master
-    paths:
-      - 'build-wheels.conf'
+on: [push, pull_request]
 
 jobs:
   build_wheels:
@@ -13,65 +8,48 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-18.04, macos-latest]
-
+        os: [ubuntu-22.04, macos-12, macos-14, windows-2022]
     steps:
-      - uses: actions/checkout@v1
-
-      - uses: actions/setup-python@v1
-        name: Install Python
+      - uses: actions/checkout@v4
+      - if: runner.os == 'macOS'
+        run: brew install pipx
+      - uses: msys2/setup-msys2@v2
+        name: Setup msys2
         with:
-          python-version: '3.7'
-
-      - name: Install cibuildwheel
-        run: |
-          python -m pip install cibuildwheel==1.3.0
-
-      - name: Build wheel
-        run: |
-          python -m cibuildwheel --output-dir wheelhouse
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            autotools
+          msystem: ucrt64
+          path-type: inherit
+        if: ${{ matrix.os == 'windows-2022' }}
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.18.0
         env:
-          CIBW_BEFORE_BUILD: bash scripts/before_ci_build.sh
-          CIBW_SKIP: pp*
-
-      - uses: actions/upload-artifact@v1
+          CIBW_PRERELEASE_PYTHONS: True
+          CIBW_SKIP: pp* *-win32
+          CIBW_BEFORE_ALL: bash scripts/cibw_before_all.sh
+          CIBW_BEFORE_ALL_WINDOWS: msys2 -c scripts/cibw_before_all.sh
+          CIBW_BEFORE_BUILD_WINDOWS: pip install wheel delvewheel
+          CIBW_TEST_EXTRAS: tests
+          CIBW_TEST_SKIP: cp38-macosx_arm64
+          CIBW_TEST_COMMAND: >
+            pytest {package}/test/ &&
+            python {package}/test_cython/runtests.py
+          CIBW_REPAIR_WHEEL_COMMAND: >
+            bash scripts/cibw_repair_wheel_command.sh {dest_dir} {wheel}
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
+           scripts\cibw_repair_wheel_command_windows.bat {dest_dir} {wheel}
+      - uses: actions/upload-artifact@v4
         with:
-          name: wheels
-          path: ./wheelhouse
-
-  windows_wheels:
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [2.7, 3.7]
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: cmd /C CALL {0}
+          name: wheels-${{ matrix.os }}
+          path: ./wheelhouse/
+  merge:
+    runs-on: ubuntu-22.04
+    needs: build_wheels
     steps:
-      - uses: actions/checkout@master
-      - uses: goanpeca/setup-miniconda@v1
-        with:
-          miniconda-version: 4.6.14
-          auto-activate-base: false
-          channels: "conda-forge"
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install libraries
-        run: conda install mpir "mpfr>=4" mpc conda=4.6.14
-
-      - name: Activate
-        run: activate
-
-      - name: Compile gmpy2
-        run: python setup.py install build_ext --mpir --static -I%CONDA_PREFIX%\Library\include -L%CONDA_PREFIX%\Library\lib
-
-      - name: Build Windows Wheels
-        run: python setup.py bdist_wheel
-
-      - uses: actions/upload-artifact@v1
+      - name: Merge Wheels
+        uses: actions/upload-artifact/merge@v4
         with:
           name: wheels
-          path: ./dist
-
-
+          pattern: wheels-*
+          delete-merged: true

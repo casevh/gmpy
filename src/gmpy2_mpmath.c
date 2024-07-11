@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_mpmath.c                                                          *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -35,57 +33,87 @@ mpmath_build_mpf(long sign, MPZ_Object *man, PyObject *exp, mp_bitcnt_t bc)
     PyObject *tup, *tsign, *tbc;
 
     if (!(tup = PyTuple_New(4))) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)man);
         Py_DECREF(exp);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
 
-    if (!(tsign = PyIntOrLong_FromLong(sign))) {
+    if (!(tsign = PyLong_FromLong(sign))) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)man);
         Py_DECREF(exp);
         Py_DECREF(tup);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
 
-    if (!(tbc = PyIntOrLong_FromMpBitCnt(bc))) {
+    if (!(tbc = GMPy_PyLong_FromMpBitCnt(bc))) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)man);
         Py_DECREF(exp);
         Py_DECREF(tup);
         Py_DECREF(tsign);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
 
     PyTuple_SET_ITEM(tup, 0, tsign);
     PyTuple_SET_ITEM(tup, 1, (PyObject*)man);
-    PyTuple_SET_ITEM(tup, 2, (exp)?exp:PyIntOrLong_FromLong(0));
+    PyTuple_SET_ITEM(tup, 2, (exp)?exp:PyLong_FromLong(0));
     PyTuple_SET_ITEM(tup, 3, tbc);
     return tup;
+}
+
+static long
+mpmath_get_sign(PyObject *x)
+{
+    /* Assume properly normalized arguments. A value of 0 implies positive, and
+     * value of 1 implies negative.
+     */
+
+    if (PyLong_Check(x)) {
+        return PyLong_AsLong(x);
+    }
+
+    if (MPZ_Check(x)) {
+        if (mpz_sgn(MPZ(x)) < 0) {
+            return 1;
+        }
+        else {
+            return 0;
+        }
+    }
+
+    TYPE_ERROR("could not convert object to integer");
+    return (long)-1;
 }
 
 PyDoc_STRVAR(doc_mpmath_normalizeg,
 "_mpmath_normalize(...): helper function for mpmath.");
 
 static PyObject *
-Pympz_mpmath_normalize(PyObject *self, PyObject *args)
+Pympz_mpmath_normalize_fast(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
 {
     long sign = 0;
-    mp_bitcnt_t zbits, bc = 0, prec = 0, shift;
     long carry = 0;
-    PyObject *exp = 0, *newexp = 0, *newexp2 = 0, *tmp = 0, *rndstr = 0;
-    MPZ_Object *man = 0, *upper = 0, *lower = 0;
-    char rnd = 0;
-    int err1, err2, err3;
+    mp_bitcnt_t zbits, shift = 0, bc = 0, prec = 0;
+    PyObject *exp = NULL, *newexp = NULL, *newexp2 = NULL, *tmp = NULL, *rndstr = NULL;
+    MPZ_Object *man = NULL, *upper = NULL, *lower = NULL;
+    Py_UCS4 rnd = 0;
 
-    if (PyTuple_GET_SIZE(args) == 6) {
+    if (nargs == 6) {
         /* Need better error-checking here. Under Python 3.0, overflow into
            C-long is possible. */
-        sign = GMPy_Integer_AsLongAndError(PyTuple_GET_ITEM(args, 0), &err1);
-        man = (MPZ_Object*)PyTuple_GET_ITEM(args, 1);
-        exp = PyTuple_GET_ITEM(args, 2);
-        bc = GMPy_Integer_AsMpBitCntAndError(PyTuple_GET_ITEM(args, 3), &err2);
-        prec = GMPy_Integer_AsMpBitCntAndError(PyTuple_GET_ITEM(args, 4), &err3);
-        rndstr = PyTuple_GET_ITEM(args, 5);
-        if (err1 || err2 || err3) {
+        sign = mpmath_get_sign(args[0]);
+        man = (MPZ_Object*)args[1];
+        exp = args[2];
+        bc = GMPy_PyLong_AsMpBitCnt(args[3]);
+        prec = GMPy_PyLong_AsMpBitCnt(args[4]);
+        rndstr = args[5];
+
+        if ((sign == -1) || (bc == (mp_bitcnt_t)(-1)) || (prec == (mp_bitcnt_t)(-1))) {
             TYPE_ERROR("arguments long, MPZ_Object*, PyObject*, long, long, char needed");
             return NULL;
         }
@@ -96,16 +124,16 @@ Pympz_mpmath_normalize(PyObject *self, PyObject *args)
     }
 
     if (!MPZ_Check(man)) {
-		/* Try to convert to an mpz... */
-		if (!(man = GMPy_MPZ_From_Integer((PyObject*)man, NULL))) {
-			TYPE_ERROR("argument is not an mpz");
-			return NULL;
-		}
+        /* Try to convert to an mpz... */
+        if (!(man = GMPy_MPZ_From_Integer((PyObject*)man, NULL))) {
+            TYPE_ERROR("argument is not an mpz");
+            return NULL;
+        }
     }
 
     /* If rndstr really is a string, extract the first character. */
-    if (Py2or3String_Check(rndstr)) {
-        rnd = Py2or3String_AsString(rndstr)[0];
+    if (PyUnicode_Check(rndstr)) {
+        rnd = PyString_1Char(rndstr);
     }
     else {
         VALUE_ERROR("invalid rounding mode specified");
@@ -118,7 +146,6 @@ Pympz_mpmath_normalize(PyObject *self, PyObject *args)
         return mpmath_build_mpf(0, man, 0, 0);
     }
 
-
     /* if bc <= prec and the number is odd return it */
     if ((bc <= prec) && mpz_odd_p(man->z)) {
         Py_INCREF((PyObject*)man);
@@ -127,14 +154,17 @@ Pympz_mpmath_normalize(PyObject *self, PyObject *args)
     }
 
     if (!(upper = GMPy_MPZ_New(NULL)) || !(lower = GMPy_MPZ_New(NULL))) {
+        /* LCOV_EXCL_START */
         Py_XDECREF((PyObject*)upper);
         Py_XDECREF((PyObject*)lower);
+        return NULL;
+        /* LCOV_EXCL_STOP */
     }
 
     if (bc > prec) {
         shift = bc - prec;
         switch (rnd) {
-            case 'f':
+            case (Py_UCS4)'f':
                 if(sign) {
                     mpz_cdiv_q_2exp(upper->z, man->z, shift);
                 }
@@ -142,7 +172,7 @@ Pympz_mpmath_normalize(PyObject *self, PyObject *args)
                     mpz_fdiv_q_2exp(upper->z, man->z, shift);
                 }
                 break;
-            case 'c':
+            case (Py_UCS4)'c':
                 if(sign) {
                     mpz_fdiv_q_2exp(upper->z, man->z, shift);
                 }
@@ -150,13 +180,13 @@ Pympz_mpmath_normalize(PyObject *self, PyObject *args)
                     mpz_cdiv_q_2exp(upper->z, man->z, shift);
                 }
                 break;
-            case 'd':
+            case (Py_UCS4)'d':
                 mpz_fdiv_q_2exp(upper->z, man->z, shift);
                 break;
-            case 'u':
+            case (Py_UCS4)'u':
                 mpz_cdiv_q_2exp(upper->z, man->z, shift);
                 break;
-            case 'n':
+            case (Py_UCS4)'n':
             default:
                 mpz_tdiv_r_2exp(lower->z, man->z, shift);
                 mpz_tdiv_q_2exp(upper->z, man->z, shift);
@@ -178,17 +208,21 @@ Pympz_mpmath_normalize(PyObject *self, PyObject *args)
                     mpz_add_ui(upper->z, upper->z, 1);
         }
 
-        if (!(tmp = PyIntOrLong_FromMpBitCnt(shift))) {
+        if (!(tmp = PyLong_FromUnsignedLong((unsigned long)shift))) {
+            /* LCOV_EXCL_START */
             Py_DECREF((PyObject*)upper);
             Py_DECREF((PyObject*)lower);
             return NULL;
+            /* LCOV_EXCL_STOP */
         }
 
         if (!(newexp = PyNumber_Add(exp, tmp))) {
+            /* LCOV_EXCL_START */
             Py_DECREF((PyObject*)upper);
             Py_DECREF((PyObject*)lower);
             Py_DECREF(tmp);
             return NULL;
+            /* LCOV_EXCL_STOP */
         }
         Py_DECREF(tmp);
         bc = prec;
@@ -203,18 +237,22 @@ Pympz_mpmath_normalize(PyObject *self, PyObject *args)
     if ((zbits = mpz_scan1(upper->z, 0)))
         mpz_tdiv_q_2exp(upper->z, upper->z, zbits);
 
-    if (!(tmp = PyIntOrLong_FromMpBitCnt(zbits))) {
+    if (!(tmp = GMPy_PyLong_FromMpBitCnt(zbits))) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)upper);
         Py_DECREF((PyObject*)lower);
         Py_DECREF(newexp);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
     if (!(newexp2 = PyNumber_Add(newexp, tmp))) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)upper);
         Py_DECREF((PyObject*)lower);
         Py_DECREF(tmp);
         Py_DECREF(newexp);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
     Py_DECREF(newexp);
     Py_DECREF(tmp);
@@ -228,37 +266,37 @@ Pympz_mpmath_normalize(PyObject *self, PyObject *args)
     return mpmath_build_mpf(sign, upper, newexp2, bc);
 }
 
-PyDoc_STRVAR(doc_mpmath_createg,
+PyDoc_STRVAR(doc_mpmath_create,
 "_mpmath_create(...): helper function for mpmath.");
 
 static PyObject *
-Pympz_mpmath_create(PyObject *self, PyObject *args)
+Pympz_mpmath_create_fast(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
 {
-    long sign;
-    mp_bitcnt_t zbits, bc = 0, prec = 0, shift;
-    long carry = 0;
-    PyObject *exp = 0, *newexp = 0, *newexp2 = 0, *tmp = 0;
-    MPZ_Object *man = 0, *upper = 0, *lower = 0;
-    int error;
+    long sign, carry = 0;
+    mp_bitcnt_t zbits, bc = 0, prec = 0, shift = 0;
+    PyObject *exp = NULL, *newexp = NULL, *newexp2 = NULL, *tmp = NULL;
+    MPZ_Object *man = NULL, *upper = NULL, *lower = NULL;
 
-    const char *rnd = "f";
+    Py_UCS4 rnd = (Py_UCS4)'f';
 
-    if (PyTuple_GET_SIZE(args) < 2) {
+    if (nargs < 2) {
         TYPE_ERROR("mpmath_create() expects 'mpz','int'[,'int','str'] arguments");
         return NULL;
     }
 
-    switch (PyTuple_GET_SIZE(args)) {
+    switch (nargs) {
         case 4:
-            rnd = Py2or3String_AsString(PyTuple_GET_ITEM(args, 3));
+            rnd = PyString_1Char(args[3]);
         case 3:
-            prec = GMPy_Integer_AsMpBitCntAndError(PyTuple_GET_ITEM(args, 2), &error);
-            if (error)
+            prec = GMPy_Integer_AsLong(args[2]);
+            if (prec == (mp_bitcnt_t)(-1)) {
+                VALUE_ERROR("could not convert prec to positive int");
                 return NULL;
+            }
         case 2:
-            exp = PyTuple_GET_ITEM(args, 1);
+            exp = args[1];
         case 1:
-            man = GMPy_MPZ_From_Integer(PyTuple_GET_ITEM(args, 0), NULL);
+            man = GMPy_MPZ_From_Integer(args[0], NULL);
             if (!man) {
                 TYPE_ERROR("mpmath_create() expects 'mpz','int'[,'int','str'] arguments");
                 return NULL;
@@ -273,10 +311,12 @@ Pympz_mpmath_create(PyObject *self, PyObject *args)
     upper = GMPy_MPZ_New(NULL);
     lower = GMPy_MPZ_New(NULL);
     if (!upper || !lower) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)man);
         Py_XDECREF((PyObject*)upper);
         Py_XDECREF((PyObject*)lower);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
 
     /* Extract sign, make man positive, and set bit count */
@@ -291,8 +331,8 @@ Pympz_mpmath_create(PyObject *self, PyObject *args)
 
     if (bc > prec) {
         shift = bc - prec;
-        switch (rnd[0]) {
-            case 'f':
+        switch (rnd) {
+            case (Py_UCS4)'f':
                 if (sign) {
                     mpz_cdiv_q_2exp(upper->z, upper->z, shift);
                 }
@@ -300,7 +340,7 @@ Pympz_mpmath_create(PyObject *self, PyObject *args)
                     mpz_fdiv_q_2exp(upper->z, upper->z, shift);
                 }
                 break;
-            case 'c':
+            case (Py_UCS4)'c':
                 if (sign) {
                     mpz_fdiv_q_2exp(upper->z, upper->z, shift);
                 }
@@ -308,13 +348,13 @@ Pympz_mpmath_create(PyObject *self, PyObject *args)
                     mpz_cdiv_q_2exp(upper->z, upper->z, shift);
                 }
                 break;
-            case 'd':
+            case (Py_UCS4)'d':
                 mpz_fdiv_q_2exp(upper->z, upper->z, shift);
                 break;
-            case 'u':
+            case (Py_UCS4)'u':
                 mpz_cdiv_q_2exp(upper->z, upper->z, shift);
                 break;
-            case 'n':
+            case (Py_UCS4)'n':
             default:
                 mpz_tdiv_r_2exp(lower->z, upper->z, shift);
                 mpz_tdiv_q_2exp(upper->z, upper->z, shift);
@@ -336,17 +376,21 @@ Pympz_mpmath_create(PyObject *self, PyObject *args)
                     mpz_add_ui(upper->z, upper->z, 1);
                 }
         }
-        if (!(tmp = PyIntOrLong_FromMpBitCnt(shift))) {
+        if (!(tmp = PyLong_FromUnsignedLong((unsigned long)shift))) {
+            /* LCOV_EXCL_START */
             Py_DECREF((PyObject*)upper);
             Py_DECREF((PyObject*)lower);
             return NULL;
+            /* LCOV_EXCL_STOP */
         }
         if (!(newexp = PyNumber_Add(exp, tmp))) {
+            /* LCOV_EXCL_START */
             Py_DECREF((PyObject*)man);
             Py_DECREF((PyObject*)upper);
             Py_DECREF((PyObject*)lower);
             Py_DECREF(tmp);
             return NULL;
+            /* LCOV_EXCL_STOP */
         }
         Py_DECREF(tmp);
         bc = prec;
@@ -360,20 +404,24 @@ Pympz_mpmath_create(PyObject *self, PyObject *args)
     if ((zbits = mpz_scan1(upper->z, 0)))
         mpz_tdiv_q_2exp(upper->z, upper->z, zbits);
 
-    if (!(tmp = PyIntOrLong_FromMpBitCnt(zbits))) {
+    if (!(tmp = GMPy_PyLong_FromMpBitCnt(zbits))) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)man);
         Py_DECREF((PyObject*)upper);
         Py_DECREF((PyObject*)lower);
         Py_DECREF(newexp);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
     if (!(newexp2 = PyNumber_Add(newexp, tmp))) {
+        /* LCOV_EXCL_START */
         Py_DECREF((PyObject*)man);
         Py_DECREF((PyObject*)upper);
         Py_DECREF((PyObject*)lower);
         Py_DECREF(tmp);
         Py_DECREF(newexp);
         return NULL;
+        /* LCOV_EXCL_STOP */
     }
     Py_DECREF(newexp);
     Py_DECREF(tmp);

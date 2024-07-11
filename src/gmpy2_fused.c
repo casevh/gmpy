@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_fused.c                                                           *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -29,7 +27,7 @@
 static PyObject *
 _GMPy_MPZ_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
 {
-    MPZ_Object *result;
+    MPZ_Object *result = NULL;
 
     if (!(result = GMPy_MPZ_New(context))) {
         /* LCOV_EXCL_START */
@@ -37,19 +35,21 @@ _GMPy_MPZ_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
         /* LCOV_EXCL_STOP */
     }
 
+    GMPY_MAYBE_BEGIN_ALLOW_THREADS(context);
     mpz_mul(result->z, MPZ(x), MPZ(y));
     mpz_add(result->z, result->z, MPZ(z));
+    GMPY_MAYBE_END_ALLOW_THREADS(context);
     return (PyObject*)result;
 }
 
 static PyObject *
-GMPy_Integer_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
+GMPy_IntegerWithType_FMA(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, int ztype, CTXT_Object *context)
 {
     PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL;
 
-    if (!(tempx = (PyObject*)GMPy_MPZ_From_Integer(x, context)) ||
-        !(tempy = (PyObject*)GMPy_MPZ_From_Integer(y, context)) ||
-        !(tempz = (PyObject*)GMPy_MPZ_From_Integer(z, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPZ_From_IntegerWithType(x, xtype, context)) ||
+        !(tempy = (PyObject*)GMPy_MPZ_From_IntegerWithType(y, ytype, context)) ||
+        !(tempz = (PyObject*)GMPy_MPZ_From_IntegerWithType(z, ztype, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -76,19 +76,21 @@ _GMPy_MPQ_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
         /* LCOV_EXCL_STOP */
     }
 
+    GMPY_MAYBE_BEGIN_ALLOW_THREADS(context);
     mpq_mul(result->q, MPQ(x), MPQ(y));
     mpq_add(result->q, result->q, MPQ(z));
+    GMPY_MAYBE_END_ALLOW_THREADS(context);
     return (PyObject*)result;
 }
 
 static PyObject *
-GMPy_Rational_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
+GMPy_RationalWithType_FMA(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, int ztype, CTXT_Object *context)
 {
     PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL;
 
-    if (!(tempx = (PyObject*)GMPy_MPQ_From_Rational(x, context)) ||
-        !(tempy = (PyObject*)GMPy_MPQ_From_Rational(y, context)) ||
-        !(tempz = (PyObject*)GMPy_MPQ_From_Rational(z, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPQ_From_RationalWithType(x, xtype, context)) ||
+        !(tempy = (PyObject*)GMPy_MPQ_From_RationalWithType(y, ytype, context)) ||
+        !(tempz = (PyObject*)GMPy_MPQ_From_RationalWithType(z, ztype, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -109,8 +111,6 @@ _GMPy_MPFR_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
 {
     MPFR_Object *result;
 
-    CHECK_CONTEXT(context);
-
     if (!(result = GMPy_MPFR_New(0, context))) {
         /* LCOV_EXCL_START */
         return NULL;
@@ -125,15 +125,13 @@ _GMPy_MPFR_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
 }
 
 static PyObject *
-GMPy_Real_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
+GMPy_RealWithType_FMA(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, int ztype, CTXT_Object *context)
 {
     PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL;
 
-    CHECK_CONTEXT(context);
-
-    if (!(tempx = (PyObject*)GMPy_MPFR_From_Real(x, 1, context)) ||
-        !(tempy = (PyObject*)GMPy_MPFR_From_Real(y, 1, context)) ||
-        !(tempz = (PyObject*)GMPy_MPFR_From_Real(z, 1, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPFR_From_RealWithType(x, xtype, 1, context)) ||
+        !(tempy = (PyObject*)GMPy_MPFR_From_RealWithType(y, ytype, 1, context)) ||
+        !(tempz = (PyObject*)GMPy_MPFR_From_RealWithType(z, ztype, 1, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -154,8 +152,6 @@ _GMPy_MPC_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
 {
     MPC_Object *result;
 
-    CHECK_CONTEXT(context);
-
     if (!(result = GMPy_MPC_New(0, 0, context))) {
         /* LCOV_EXCL_START */
         return NULL;
@@ -168,15 +164,13 @@ _GMPy_MPC_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
 }
 
 static PyObject *
-GMPy_Complex_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
+GMPy_ComplexWithType_FMA(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, int ztype, CTXT_Object *context)
 {
     PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL;
 
-    CHECK_CONTEXT(context);
-
-    if (!(tempx = (PyObject*)GMPy_MPC_From_Complex(x, 1, 1, context)) ||
-        !(tempy = (PyObject*)GMPy_MPC_From_Complex(y, 1, 1, context)) ||
-        !(tempz = (PyObject*)GMPy_MPC_From_Complex(z, 1, 1, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPC_From_ComplexWithType(x, xtype, 1, 1, context)) ||
+        !(tempy = (PyObject*)GMPy_MPC_From_ComplexWithType(y, ytype, 1, 1, context)) ||
+        !(tempz = (PyObject*)GMPy_MPC_From_ComplexWithType(z, ztype, 1, 1, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -193,14 +187,14 @@ GMPy_Complex_FMA(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
 }
 
 PyDoc_STRVAR(GMPy_doc_context_fma,
-"context.fma(x, y, z) -> number\n\n"
+"context.fma(x, y, z, /) -> mpz | mpq | mpfr | mpc\n\n"
 "Return correctly rounded result of (x * y) + z.");
 
 PyDoc_STRVAR(GMPy_doc_function_fma,
-"fma(x, y, z) -> number\n\n"
+"fma(x, y, z, /) -> mpz | mpq | mpfr | mpc\n\n"
 "Return correctly rounded result of (x * y) + z.");
 
-GMPY_MPFR_MPC_TRIOP_TEMPLATE(FMA, fma);
+GMPY_MPFR_MPC_TRIOP_TEMPLATEWT(FMA, fma);
 
 static PyObject *
 _GMPy_MPZ_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
@@ -213,19 +207,21 @@ _GMPy_MPZ_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
         /* LCOV_EXCL_STOP */
     }
 
+    GMPY_MAYBE_BEGIN_ALLOW_THREADS(context);
     mpz_mul(result->z, MPZ(x), MPZ(y));
     mpz_sub(result->z, result->z, MPZ(z));
+    GMPY_MAYBE_END_ALLOW_THREADS(context);
     return (PyObject*)result;
 }
 
 static PyObject *
-GMPy_Integer_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
+GMPy_IntegerWithType_FMS(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, int ztype, CTXT_Object *context)
 {
     PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL;
 
-    if (!(tempx = (PyObject*)GMPy_MPZ_From_Integer(x, context)) ||
-        !(tempy = (PyObject*)GMPy_MPZ_From_Integer(y, context)) ||
-        !(tempz = (PyObject*)GMPy_MPZ_From_Integer(z, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPZ_From_IntegerWithType(x, xtype, context)) ||
+        !(tempy = (PyObject*)GMPy_MPZ_From_IntegerWithType(y, ytype, context)) ||
+        !(tempz = (PyObject*)GMPy_MPZ_From_IntegerWithType(z, ztype, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -252,19 +248,21 @@ _GMPy_MPQ_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
         /* LCOV_EXCL_STOP */
     }
 
+    GMPY_MAYBE_BEGIN_ALLOW_THREADS(context);
     mpq_mul(result->q, MPQ(x), MPQ(y));
     mpq_sub(result->q, result->q, MPQ(z));
+    GMPY_MAYBE_END_ALLOW_THREADS(context);
     return (PyObject*)result;
 }
 
 static PyObject *
-GMPy_Rational_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
+GMPy_RationalWithType_FMS(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, int ztype, CTXT_Object *context)
 {
     PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL;
 
-    if (!(tempx = (PyObject*)GMPy_MPQ_From_Rational(x, context)) ||
-        !(tempy = (PyObject*)GMPy_MPQ_From_Rational(y, context)) ||
-        !(tempz = (PyObject*)GMPy_MPQ_From_Rational(z, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPQ_From_RationalWithType(x, xtype, context)) ||
+        !(tempy = (PyObject*)GMPy_MPQ_From_RationalWithType(y, ytype, context)) ||
+        !(tempz = (PyObject*)GMPy_MPQ_From_RationalWithType(z, ztype, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -285,8 +283,6 @@ _GMPy_MPFR_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
 {
     MPFR_Object *result;
 
-    CHECK_CONTEXT(context);
-
     if (!(result = GMPy_MPFR_New(0, context))) {
         /* LCOV_EXCL_START */
         return NULL;
@@ -301,15 +297,13 @@ _GMPy_MPFR_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
 }
 
 static PyObject *
-GMPy_Real_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
+GMPy_RealWithType_FMS(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, int ztype, CTXT_Object *context)
 {
     PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL;
 
-    CHECK_CONTEXT(context);
-
-    if (!(tempx = (PyObject*)GMPy_MPFR_From_Real(x, 1, context)) ||
-        !(tempy = (PyObject*)GMPy_MPFR_From_Real(y, 1, context)) ||
-        !(tempz = (PyObject*)GMPy_MPFR_From_Real(z, 1, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPFR_From_RealWithType(x, xtype, 1, context)) ||
+        !(tempy = (PyObject*)GMPy_MPFR_From_RealWithType(y, ytype, 1, context)) ||
+        !(tempz = (PyObject*)GMPy_MPFR_From_RealWithType(z, ztype, 1, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -328,9 +322,7 @@ GMPy_Real_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
 static PyObject *
 _GMPy_MPC_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
 {
-    MPC_Object *result;
-
-    CHECK_CONTEXT(context);
+    MPC_Object *result = NULL, *temp = NULL;
 
     if (!(result = GMPy_MPC_New(0, 0, context))) {
         /* LCOV_EXCL_START */
@@ -338,25 +330,23 @@ _GMPy_MPC_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
         /* LCOV_EXCL_STOP */
     }
 
-    /* TODO: We shouldn't temporarily mutate an mpc object. */
+    temp = GMPy_MPC_From_ComplexWithTypeAndCopy(z, OBJ_TYPE_MPC, 1, 1, context);
 
-    mpc_neg(MPC(z), MPC(z), GET_MPC_ROUND(context));
-    result->rc = mpc_fma(result->c, MPC(x), MPC(y), MPC(z), GET_MPC_ROUND(context));
-    mpc_neg(MPC(z), MPC(z), GET_MPC_ROUND(context));
+    mpc_neg(MPC(temp), MPC(temp), GET_MPC_ROUND(context));
+    result->rc = mpc_fma(result->c, MPC(x), MPC(y), MPC(temp), GET_MPC_ROUND(context));
+    Py_DECREF(temp);
     _GMPy_MPC_Cleanup(&result, context);
     return (PyObject*)result;
 }
 
 static PyObject *
-GMPy_Complex_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
+GMPy_ComplexWithType_FMS(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, int ztype, CTXT_Object *context)
 {
     PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL;
 
-    CHECK_CONTEXT(context);
-
-    if (!(tempx = (PyObject*)GMPy_MPC_From_Complex(x, 1, 1, context)) ||
-        !(tempy = (PyObject*)GMPy_MPC_From_Complex(y, 1, 1, context)) ||
-        !(tempz = (PyObject*)GMPy_MPC_From_Complex(z, 1, 1, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPC_From_ComplexWithType(x, xtype, 1, 1, context)) ||
+        !(tempy = (PyObject*)GMPy_MPC_From_ComplexWithType(y, ytype, 1, 1, context)) ||
+        !(tempz = (PyObject*)GMPy_MPC_From_ComplexWithType(z, ztype, 1, 1, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -371,18 +361,17 @@ GMPy_Complex_FMS(PyObject *x, PyObject *y, PyObject *z, CTXT_Object *context)
     Py_DECREF(tempz);
     return result;
 }
-
 PyDoc_STRVAR(GMPy_doc_context_fms,
-"context.fms(x, y, z) -> number\n\n"
+"context.fms(x, y, z, /) -> mpz | mpq | mpfr | mpc\n\n"
 "Return correctly rounded result of (x * y) - z.");
 
 PyDoc_STRVAR(GMPy_doc_function_fms,
-"fms(x, y, z) -> number\n\n"
+"fms(x, y, z, /) -> mpz | mpq | mpfr | mpc\n\n"
 "Return correctly rounded result of (x * y) - z.");
 
-GMPY_MPFR_MPC_TRIOP_TEMPLATE(FMS, fms);
+GMPY_MPFR_MPC_TRIOP_TEMPLATEWT(FMS, fms);
 
-/* Add support for new fmma and fmms functions from MPFr 4. */\
+/* Add support for new fmma and fmms functions from MPFR 4. */\
 
 #if MPFR_VERSION_MAJOR > 3
 
@@ -400,22 +389,25 @@ _GMPy_MPZ_FMMA(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *
         /* LCOV_EXCL_STOP */
     }
 
+    GMPY_MAYBE_BEGIN_ALLOW_THREADS(context);
     mpz_mul(result->z, MPZ(x), MPZ(y));
     mpz_mul(temp->z, MPZ(z), MPZ(t));
     mpz_add(result->z, result->z, temp->z);
+    GMPY_MAYBE_END_ALLOW_THREADS(context);
     Py_DECREF(temp);
     return (PyObject*)result;
 }
 
 static PyObject *
-GMPy_Integer_FMMA(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *context)
+GMPy_IntegerWithType_FMMA(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, 
+                          int ztype, PyObject *t, int ttype, CTXT_Object *context)
 {
-    PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL, *tempt = NULL;
+    PyObject *result = NULL, *tempx = NULL, *tempy = NULL, *tempz = NULL, *tempt = NULL;
 
-    if (!(tempx = (PyObject*)GMPy_MPZ_From_Integer(x, context)) ||
-        !(tempy = (PyObject*)GMPy_MPZ_From_Integer(y, context)) ||
-        !(tempz = (PyObject*)GMPy_MPZ_From_Integer(z, context)) ||
-        !(tempt = (PyObject*)GMPy_MPZ_From_Integer(t, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPZ_From_IntegerWithType(x, xtype, context)) ||
+        !(tempy = (PyObject*)GMPy_MPZ_From_IntegerWithType(y, ytype, context)) ||
+        !(tempz = (PyObject*)GMPy_MPZ_From_IntegerWithType(z, ztype, context)) ||
+        !(tempt = (PyObject*)GMPy_MPZ_From_IntegerWithType(t, ttype, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -447,22 +439,25 @@ _GMPy_MPQ_FMMA(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *
         /* LCOV_EXCL_STOP */
     }
 
+    GMPY_MAYBE_BEGIN_ALLOW_THREADS(context);
     mpq_mul(result->q, MPQ(x), MPQ(y));
     mpq_mul(temp->q, MPQ(z), MPQ(t));
     mpq_add(result->q, result->q, temp->q);
+    GMPY_MAYBE_END_ALLOW_THREADS(context);
     Py_DECREF(temp);
     return (PyObject*)result;
 }
 
 static PyObject *
-GMPy_Rational_FMMA(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *context)
+GMPy_RationalWithType_FMMA(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, 
+                           int ztype, PyObject *t, int ttype, CTXT_Object *context)
 {
-    PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL, *tempt = NULL;
+    PyObject *result = NULL, *tempx = NULL, *tempy = NULL, *tempz = NULL, *tempt = NULL;
 
-    if (!(tempx = (PyObject*)GMPy_MPQ_From_Rational(x, context)) ||
-        !(tempy = (PyObject*)GMPy_MPQ_From_Rational(y, context)) ||
-        !(tempz = (PyObject*)GMPy_MPQ_From_Rational(z, context)) ||
-        !(tempt = (PyObject*)GMPy_MPQ_From_Rational(t, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPQ_From_RationalWithType(x, xtype, context)) ||
+        !(tempy = (PyObject*)GMPy_MPQ_From_RationalWithType(y, ytype, context)) ||
+        !(tempz = (PyObject*)GMPy_MPQ_From_RationalWithType(z, ztype, context)) ||
+        !(tempt = (PyObject*)GMPy_MPQ_From_RationalWithType(t, ttype, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -485,8 +480,6 @@ _GMPy_MPFR_FMMA(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object 
 {
     MPFR_Object *result;
 
-    CHECK_CONTEXT(context);
-
     if (!(result = GMPy_MPFR_New(0, context))) {
         /* LCOV_EXCL_START */
         return NULL;
@@ -494,23 +487,22 @@ _GMPy_MPFR_FMMA(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object 
     }
 
     mpfr_clear_flags();
-
+    
     result->rc = mpfr_fmma(result->f, MPFR(x), MPFR(y), MPFR(z), MPFR(t), GET_MPFR_ROUND(context));
     _GMPy_MPFR_Cleanup(&result, context);
     return (PyObject*)result;
 }
 
 static PyObject *
-GMPy_Real_FMMA(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *context)
+GMPy_RealWithType_FMMA(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, 
+                       int ztype, PyObject *t, int ttype, CTXT_Object *context)
 {
     PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL, *tempt = NULL;
 
-    CHECK_CONTEXT(context);
-
-    if (!(tempx = (PyObject*)GMPy_MPFR_From_Real(x, 1, context)) ||
-        !(tempy = (PyObject*)GMPy_MPFR_From_Real(y, 1, context)) ||
-        !(tempz = (PyObject*)GMPy_MPFR_From_Real(z, 1, context)) ||
-        !(tempt = (PyObject*)GMPy_MPFR_From_Real(t, 1, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPFR_From_RealWithType(x, xtype, 1, context)) ||
+        !(tempy = (PyObject*)GMPy_MPFR_From_RealWithType(y, ytype, 1, context)) ||
+        !(tempz = (PyObject*)GMPy_MPFR_From_RealWithType(z, ztype, 1, context)) ||
+        !(tempt = (PyObject*)GMPy_MPFR_From_RealWithType(t, ttype, 1, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -529,14 +521,14 @@ GMPy_Real_FMMA(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *
 }
 
 PyDoc_STRVAR(GMPy_doc_context_fmma,
-"context.fmma(x, y, z, t) -> number\n\n"
+"context.fmma(x, y, z, t, /) -> mpfr\n\n"
 "Return correctly rounded result of (x * y) + (z * t).");
 
 PyDoc_STRVAR(GMPy_doc_function_fmma,
-"fmma(x, y, z, t) -> number\n\n"
+"fmma(x, y, z, t, /) -> mpfr\n\n"
 "Return correctly rounded result of (x * y) + (z + t).");
 
-GMPY_MPFR_QUADOP_TEMPLATE(FMMA, fmma);
+GMPY_MPFR_QUADOP_TEMPLATEWT(FMMA, fmma);
 
 static PyObject *
 _GMPy_MPZ_FMMS(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *context)
@@ -552,22 +544,25 @@ _GMPy_MPZ_FMMS(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *
         /* LCOV_EXCL_STOP */
     }
 
+    GMPY_MAYBE_BEGIN_ALLOW_THREADS(context);
     mpz_mul(result->z, MPZ(x), MPZ(y));
     mpz_mul(temp->z, MPZ(z), MPZ(t));
     mpz_sub(result->z, result->z, temp->z);
+    GMPY_MAYBE_END_ALLOW_THREADS(context);
     Py_DECREF(temp);
     return (PyObject*)result;
 }
 
 static PyObject *
-GMPy_Integer_FMMS(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *context)
+GMPy_IntegerWithType_FMMS(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, 
+                          int ztype, PyObject *t, int ttype, CTXT_Object *context)
 {
-    PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL, *tempt = NULL;
+    PyObject *result = NULL, *tempx = NULL, *tempy = NULL, *tempz = NULL, *tempt = NULL;
 
-    if (!(tempx = (PyObject*)GMPy_MPZ_From_Integer(x, context)) ||
-        !(tempy = (PyObject*)GMPy_MPZ_From_Integer(y, context)) ||
-        !(tempz = (PyObject*)GMPy_MPZ_From_Integer(z, context)) ||
-        !(tempt = (PyObject*)GMPy_MPZ_From_Integer(t, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPZ_From_IntegerWithType(x, xtype, context)) ||
+        !(tempy = (PyObject*)GMPy_MPZ_From_IntegerWithType(y, ytype, context)) ||
+        !(tempz = (PyObject*)GMPy_MPZ_From_IntegerWithType(z, ztype, context)) ||
+        !(tempt = (PyObject*)GMPy_MPZ_From_IntegerWithType(t, ttype, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -599,22 +594,25 @@ _GMPy_MPQ_FMMS(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *
         /* LCOV_EXCL_STOP */
     }
 
+    GMPY_MAYBE_BEGIN_ALLOW_THREADS(context);
     mpq_mul(result->q, MPQ(x), MPQ(y));
     mpq_mul(temp->q, MPQ(z), MPQ(t));
     mpq_sub(result->q, result->q, temp->q);
+    GMPY_MAYBE_END_ALLOW_THREADS(context);
     Py_DECREF(temp);
     return (PyObject*)result;
 }
 
 static PyObject *
-GMPy_Rational_FMMS(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *context)
+GMPy_RationalWithType_FMMS(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, 
+                           int ztype, PyObject *t, int ttype, CTXT_Object *context)
 {
-    PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL, *tempt = NULL;
+    PyObject *result = NULL, *tempx = NULL, *tempy = NULL, *tempz = NULL, *tempt = NULL;
 
-    if (!(tempx = (PyObject*)GMPy_MPQ_From_Rational(x, context)) ||
-        !(tempy = (PyObject*)GMPy_MPQ_From_Rational(y, context)) ||
-        !(tempz = (PyObject*)GMPy_MPQ_From_Rational(z, context)) ||
-        !(tempt = (PyObject*)GMPy_MPQ_From_Rational(t, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPQ_From_RationalWithType(x, xtype, context)) ||
+        !(tempy = (PyObject*)GMPy_MPQ_From_RationalWithType(y, ytype, context)) ||
+        !(tempz = (PyObject*)GMPy_MPQ_From_RationalWithType(z, ztype, context)) ||
+        !(tempt = (PyObject*)GMPy_MPQ_From_RationalWithType(t, ttype, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -637,8 +635,6 @@ _GMPy_MPFR_FMMS(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object 
 {
     MPFR_Object *result;
 
-    CHECK_CONTEXT(context);
-
     if (!(result = GMPy_MPFR_New(0, context))) {
         /* LCOV_EXCL_START */
         return NULL;
@@ -653,16 +649,15 @@ _GMPy_MPFR_FMMS(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object 
 }
 
 static PyObject *
-GMPy_Real_FMMS(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *context)
+GMPy_RealWithType_FMMS(PyObject *x, int xtype, PyObject *y, int ytype, PyObject *z, 
+                       int ztype, PyObject *t, int ttype, CTXT_Object *context)
 {
     PyObject *result, *tempx = NULL, *tempy = NULL, *tempz = NULL, *tempt = NULL;
 
-    CHECK_CONTEXT(context);
-
-    if (!(tempx = (PyObject*)GMPy_MPFR_From_Real(x, 1, context)) ||
-        !(tempy = (PyObject*)GMPy_MPFR_From_Real(y, 1, context)) ||
-        !(tempz = (PyObject*)GMPy_MPFR_From_Real(z, 1, context)) ||
-        !(tempt = (PyObject*)GMPy_MPFR_From_Real(t, 1, context))) {
+    if (!(tempx = (PyObject*)GMPy_MPFR_From_RealWithType(x, xtype, 1, context)) ||
+        !(tempy = (PyObject*)GMPy_MPFR_From_RealWithType(y, ytype, 1, context)) ||
+        !(tempz = (PyObject*)GMPy_MPFR_From_RealWithType(z, ztype, 1, context)) ||
+        !(tempt = (PyObject*)GMPy_MPFR_From_RealWithType(t, ttype, 1, context))) {
         /* LCOV_EXCL_START */
         Py_XDECREF(tempx);
         Py_XDECREF(tempy);
@@ -681,15 +676,13 @@ GMPy_Real_FMMS(PyObject *x, PyObject *y, PyObject *z, PyObject *t, CTXT_Object *
 }
 
 PyDoc_STRVAR(GMPy_doc_context_fmms,
-"context.fmms(x, y, z, t) -> number\n\n"
+"context.fmms(x, y, z, t, /) -> mpfr\n\n"
 "Return correctly rounded result of (x * y) - (z * t).");
 
 PyDoc_STRVAR(GMPy_doc_function_fmms,
-"fmms(x, y, z, t) -> number\n\n"
+"fmms(x, y, z, t, /) -> mpfr\n\n"
 "Return correctly rounded result of (x * y) - (z + t).");
 
-GMPY_MPFR_QUADOP_TEMPLATE(FMMS, fmms);
+GMPY_MPFR_QUADOP_TEMPLATEWT(FMMS, fmms);
 
 #endif
-
-

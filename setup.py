@@ -1,15 +1,19 @@
-import platform
 import os
-from setuptools import setup, find_packages, Extension
+import platform
+from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
+from pathlib import Path
 
 ON_WINDOWS = platform.system() == 'Windows'
 _comp_args = ["DSHARED=1"]
 sources = ['src/gmpy2.c']
-
-# Utility function to read the contents of the README file.
-def read(fname):
-    return open(os.path.join(os.path.dirname(__file__), fname)).read()
+if os.getenv('CIBUILDWHEEL'):
+    include_dirs = [os.path.join(os.path.dirname(__file__), '.local', 'include')]
+    library_dirs = [os.path.join(os.path.dirname(__file__), '.local',
+                                 'bin' if ON_WINDOWS else 'lib')]
+else:
+    include_dirs = []
+    library_dirs = []
 
 class Gmpy2Build(build_ext):
     description = "Build gmpy2 with custom build options"
@@ -20,8 +24,6 @@ class Gmpy2Build(build_ext):
         ('gcov', None, "Enable GCC code coverage collection"),
         ('vector', None, "Include the vector_XXX() functions;"
          "they are unstable and under active development"),
-        ('mpir', None, "Specifies use of MPIR and MSVC on Windows."
-         "Ignored on other operating systems."),
         ('static', None, "Enable static linking compile time options."),
         ('static-dir=', None, "Enable static linking and specify location."),
         ('gdb', None, "Build with debug symbols."),
@@ -32,13 +34,13 @@ class Gmpy2Build(build_ext):
         self.fast = False
         self.gcov = False
         self.vector = False
-        self.mpir = False
         self.static = False
         self.static_dir = False
         self.gdb = False
 
     def finalize_options(self):
         build_ext.finalize_options(self)
+        self.force = 1
         if self.fast:
             _comp_args.append('DFAST=1')
         if self.gcov:
@@ -63,21 +65,6 @@ class Gmpy2Build(build_ext):
 
     def build_extensions(self):
         compiler = self.compiler.compiler_type
-        if compiler == 'msvc':
-            if self.mpir:
-                if self.static:
-                    self.extensions[0].libraries.extend(['mpir_static', 'mpfr_static', 'mpc_static'])
-                else:
-                    self.extensions[0].libraries.extend(['mpir', 'mpfr', 'mpc'])
-            else:
-                self.extensions[0].libraries.extend(['gmp', 'mpfr', 'mpc'])
-            _comp_args.append('DMPIR=1')
-            if not self.static:
-                # MSVC shared build
-                _comp_args.append('DMSC_USE_DLL')
-        else:
-            self.extensions[0].libraries.extend(['gmp', 'mpfr', 'mpc'])
-
         _prefix = '-' if compiler != 'msvc' else '/'
         for i in range(len(_comp_args)):
             _comp_args[i] = ''.join([_prefix, _comp_args[i]])
@@ -86,7 +73,9 @@ class Gmpy2Build(build_ext):
 extensions = [
     Extension('gmpy2.gmpy2',
               sources=sources,
-              include_dirs=['./src'],
+              include_dirs=include_dirs,
+              libraries=['mpc','mpfr','gmp'],
+              library_dirs=library_dirs,
               extra_compile_args=_comp_args,
               )
 ]
@@ -94,45 +83,6 @@ extensions = [
 cmdclass = {'build_ext': Gmpy2Build}
 
 setup(
-    name="gmpy2",
-    version="2.1.0b5",
-    author="Case Van Horsen",
-    author_email="casevh@gmail.com",
     cmdclass=cmdclass,
-    license="LGPL-3.0+",
-    url="https://github.com/aleaxit/gmpy",
-    description="gmpy2 interface to GMP, MPFR, "
-    "and MPC for Python 2.7 and 3.4+",
-    long_description=read('README'),
-    zip_safe=False,
-    include_package_data=True,
-    package_data={'gmpy2': [
-        '*.pxd',
-        'gmpy2.h',
-    ]},
-    packages=find_packages(),
-    classifiers=[
-        'Development Status :: 4 - Beta',
-        'Intended Audience :: Developers',
-        'Intended Audience :: Science/Research',
-        'License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)',
-        'Natural Language :: English',
-        'Operating System :: MacOS :: MacOS X',
-        'Operating System :: Microsoft :: Windows',
-        'Operating System :: POSIX',
-        'Programming Language :: C',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: Implementation :: CPython',
-        'Topic :: Scientific/Engineering :: Mathematics',
-        'Topic :: Software Development :: Libraries :: Python Modules',
-    ],
-    keywords="gmp mpfr mpc multiple-precision arbitrary-precision precision bignum",
     ext_modules=extensions,
 )

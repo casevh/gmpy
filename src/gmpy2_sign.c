@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_sign.c                                                            *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -38,7 +36,7 @@ GMPy_Integer_Sign(PyObject *x, CTXT_Object *context)
     else {
         res = mpz_sgn(tempx->z);
         Py_DECREF((PyObject*)tempx);
-        return PyIntOrLong_FromLong(res);
+        return PyLong_FromLong(res);
     }
 }
 
@@ -54,7 +52,7 @@ GMPy_Rational_Sign(PyObject *x, CTXT_Object *context)
     else {
         res = mpq_sgn(tempx->q);
         Py_DECREF((PyObject*)tempx);
-        return PyIntOrLong_FromLong(res);
+        return PyLong_FromLong(res);
     }
 }
 
@@ -74,7 +72,7 @@ GMPy_Real_Sign(PyObject *x, CTXT_Object *context)
         mpfr_clear_flags();
         sign = mpfr_sgn(tempx->f);
         Py_DECREF((PyObject*)tempx);
-        result = PyIntOrLong_FromLong(sign);
+        result = PyLong_FromLong(sign);
         GMPY_CHECK_ERANGE(result, context, "sign() of invalid value (NaN)");
         return result;
     }
@@ -95,7 +93,7 @@ GMPy_Number_Sign(PyObject *x, CTXT_Object *context)
 }
 
 PyDoc_STRVAR(GMPy_doc_function_sign,
-"sign(x) -> number\n\n"
+"sign(x, /) -> int\n\n"
 "Return -1 if x < 0, 0 if x == 0, or +1 if x >0.");
 
 static PyObject *

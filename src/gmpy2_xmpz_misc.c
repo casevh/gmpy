@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_xmpz_misc.c                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -26,8 +24,11 @@
  * License along with GMPY2; if not, see <http://www.gnu.org/licenses/>    *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+
+#include "pythoncapi_compat.h"
+
 PyDoc_STRVAR(GMPy_doc_xmpz_function_xbit_mask,
-"xbit_mask(n) -> xmpz\n\n"
+"xbit_mask(n, /) -> xmpz\n\n"
 "Return an 'xmpz' exactly n bits in length with all bits set.\n");
 
 static PyObject *
@@ -39,7 +40,7 @@ GMPy_XMPZ_Function_XbitMask(PyObject *self, PyObject *other)
 
     CHECK_CONTEXT(context);
 
-    i = ssize_t_From_Integer(other);
+    i = GMPy_Integer_AsSsize_t(other);
     if (i == -1 && PyErr_Occurred()) {
         TYPE_ERROR("xbit_mask() requires 'int' argument");
         return NULL;
@@ -96,34 +97,10 @@ GMPy_XMPZ_Com_Slot(XMPZ_Object *x)
     Py_RETURN_NONE;
 }
 
-#if PY_MAJOR_VERSION < 3
-/* hex/oct formatting (mpz-only) */
-static PyObject *
-GMPy_XMPZ_Oct_Slot(XMPZ_Object *self)
-{
-    CTXT_Object *context = NULL;
-
-    CHECK_CONTEXT(context);
-
-    return GMPy_PyStr_From_XMPZ(self, 8, 0, context);
-}
-
-static PyObject *
-GMPy_XMPZ_Hex_Slot(XMPZ_Object *self)
-{
-    CTXT_Object *context = NULL;
-
-    CHECK_CONTEXT(context);
-
-    return GMPy_PyStr_From_XMPZ(self, 16, 0, context);
-}
-#endif
-
 PyDoc_STRVAR(GMPy_doc_xmpz_method_make_mpz,
-"xmpz.make_mpz() -> mpz\n\n"
-"Return an mpz by converting an 'xmpz' to an 'mpz' as quickly as\n"
-"possible.\n\n"
-"NOTE: Optimized for speed so the original xmpz is set to 0!");
+"x.make_mpz() -> mpz\n\n"
+"Return an `mpz` by converting x as quickly as possible.\n\n"
+"NOTE: Optimized for speed so the original `xmpz` value is set to 0!");
 
 static PyObject *
 GMPy_XMPZ_Method_MakeMPZ(PyObject *self, PyObject *other)
@@ -142,8 +119,8 @@ GMPy_XMPZ_Method_MakeMPZ(PyObject *self, PyObject *other)
 }
 
 PyDoc_STRVAR(GMPy_doc_xmpz_method_copy,
-"xmpz.copy() -> xmpz\n\n"
-"Return a copy of an xmpz.");
+"x.copy() -> xmpz\n\n"
+"Return a copy of a x.");
 
 static PyObject *
 GMPy_XMPZ_Method_Copy(PyObject *self, PyObject *other)
@@ -175,7 +152,7 @@ GMPy_XMPZ_Method_SubScript(XMPZ_Object* self, PyObject* item)
     if (PyIndex_Check(item)) {
         Py_ssize_t i;
 
-        i = PyIntOrLong_AsSsize_t(item);
+        i = PyLong_AsSsize_t(item);
         if (i == -1 && PyErr_Occurred()) {
             INDEX_ERROR("argument too large to be converted to an index");
             return NULL;
@@ -183,25 +160,17 @@ GMPy_XMPZ_Method_SubScript(XMPZ_Object* self, PyObject* item)
         if (i < 0) {
             i += mpz_sizeinbase(self->z, 2);
         }
-        return PyIntOrLong_FromLong(mpz_tstbit(self->z, i));
+        return PyLong_FromLong(mpz_tstbit(self->z, i));
     }
     else if (PySlice_Check(item)) {
         Py_ssize_t start, stop, step, slicelength, cur, i;
         MPZ_Object *result;
 
-#if PY_VERSION_HEX > 0x030200A4
         if (PySlice_GetIndicesEx(item,
                          mpz_sizeinbase(self->z, 2),
                          &start, &stop, &step, &slicelength) < 0) {
             return NULL;
         }
-#else
-        if (PySlice_GetIndicesEx((PySliceObject*)item,
-                         mpz_sizeinbase(self->z, 2),
-                         &start, &stop, &step, &slicelength) < 0) {
-            return NULL;
-        }
-#endif
 
         if ((step < 0 && start < stop) || (step > 0 && start > stop)) {
             stop = start;
@@ -232,12 +201,12 @@ GMPy_XMPZ_Method_AssignSubScript(XMPZ_Object* self, PyObject* item, PyObject* va
 {
     CTXT_Object *context = NULL;
 
-    CHECK_CONTEXT(context);
+    CHECK_CONTEXT_M1(context);
 
     if (PyIndex_Check(item)) {
         Py_ssize_t bit_value, i;
 
-        i = PyIntOrLong_AsSsize_t(item);
+        i = PyLong_AsSsize_t(item);
         if (i == -1 && PyErr_Occurred()) {
             INDEX_ERROR("argument too large to be converted to an index");
             return -1;
@@ -246,7 +215,7 @@ GMPy_XMPZ_Method_AssignSubScript(XMPZ_Object* self, PyObject* item, PyObject* va
             i += mpz_sizeinbase(self->z, 2);
         }
 
-        bit_value = PyIntOrLong_AsSsize_t(value);
+        bit_value = PyLong_AsSsize_t(value);
         if (bit_value == -1 && PyErr_Occurred()) {
             VALUE_ERROR("bit value must be 0 or 1");
             return -1;
@@ -268,12 +237,12 @@ GMPy_XMPZ_Method_AssignSubScript(XMPZ_Object* self, PyObject* item, PyObject* va
         Py_ssize_t cur, i, seq_len, start, stop, step, slicelength, temp;
 
         seq_len = mpz_sizeinbase(self->z, 2);
-        if (((PySliceObject*)item)->stop != Py_None) {
+        if (!Py_IsNone(((PySliceObject*)item)->stop)) {
             /* If a fixed endpoint is specified, and the endpoint is greater
              * than the length of the xmpz object, allow the underlying xmpz
              * object to be made larger.
              */
-            temp = PyIntOrLong_AsSsize_t(((PySliceObject*)item)->stop);
+            temp = PyLong_AsSsize_t(((PySliceObject*)item)->stop);
             if (temp == -1  && PyErr_Occurred()) {
                 return 0;
             }
@@ -282,19 +251,11 @@ GMPy_XMPZ_Method_AssignSubScript(XMPZ_Object* self, PyObject* item, PyObject* va
             }
         }
 
-#if PY_VERSION_HEX > 0x030200A4
         if (PySlice_GetIndicesEx(item,
                         seq_len,
                         &start, &stop, &step, &slicelength) < 0) {
             return -1;
         }
-#else
-        if (PySlice_GetIndicesEx((PySliceObject*)item,
-                        seq_len,
-                        &start, &stop, &step, &slicelength) < 0) {
-            return -1;
-        }
-#endif
 
         if ((step < 0 && start < stop) || (step > 0 && start > stop)) {
             stop = start;
@@ -378,7 +339,7 @@ static void
 GMPy_Iter_Dealloc(GMPy_Iter_Object *self)
 {
     Py_XDECREF((PyObject*)self->bitmap);
-    PyObject_Del(self);
+    PyObject_Free(self);
 };
 
 static PyObject *
@@ -411,7 +372,7 @@ GMPy_Iter_Next(GMPy_Iter_Object *self) {
                     PyErr_SetNone(PyExc_StopIteration);
                 else {
                     self->start = temp + 1;
-                    result = PyIntOrLong_FromSsize_t(temp);
+                    result = PyLong_FromSsize_t(temp);
                 }
             }
             break;
@@ -424,7 +385,7 @@ GMPy_Iter_Next(GMPy_Iter_Object *self) {
                     PyErr_SetNone(PyExc_StopIteration);
                 else {
                     self->start = temp + 1;
-                    result = PyIntOrLong_FromSsize_t(temp);
+                    result = PyLong_FromSsize_t(temp);
                 }
             }
             break;
@@ -437,16 +398,16 @@ GMPy_Iter_Next(GMPy_Iter_Object *self) {
 static PyObject *
 GMPy_Iter_Repr(GMPy_Iter_Object *self)
 {
-    return Py_BuildValue("s", "<gmpy2.Iterator>");
+    return PyUnicode_FromString("<gmpy2.Iterator>");
 };
 
 PyDoc_STRVAR(GMPy_doc_xmpz_method_iter_bits,
-"xmpz.iter_bits(start=0, stop=-1) -> iterator\n\n"
-"Return True or False for each bit position in 'xmpz' beginning at\n"
+"x.iter_bits(start=0, stop=-1) -> collections.abc.Iterator\n\n"
+"Return `True` or `False` for each bit position in x beginning at\n"
 "'start'. If a positive value is specified for 'stop', iteration is\n"
 "continued until 'stop' is reached. If a negative value is specified,\n"
 "iteration is continued until the last 1-bit. Note: the value of the\n"
-"underlying xmpz object can change during iteration.");
+"underlying `xmpz` object can change during iteration.");
 
 static PyObject *
 GMPy_XMPZ_Method_IterBits(PyObject *self, PyObject *args, PyObject *kwargs)
@@ -474,13 +435,13 @@ GMPy_XMPZ_Method_IterBits(PyObject *self, PyObject *args, PyObject *kwargs)
 }
 
 PyDoc_STRVAR(GMPy_doc_xmpz_method_iter_set,
-"xmpz.iter_set(start=0, stop=-1) -> iterator\n\n"
+"x.iter_set(start=0, stop=-1) -> collections.abc.Iterator\n\n"
 "Return an iterator yielding the bit position for every bit that\n"
-"is set in 'xmpz', beginning at 'start'. If a positive value is\n"
+"is set in x, beginning at 'start'. If a positive value is\n"
 "specified for 'stop', iteration is continued until 'stop' is\n"
 "reached. To match the behavior of slicing, 'stop' is not included.\n"
 "If a negative value is specified, iteration is continued until\n"
-"the last 1-bit. Note: the value of the underlying xmpz object can\n"
+"the last 1-bit. Note: the value of the underlying `xmpz` object can\n"
 "change during iteration.");
 
 static PyObject *
@@ -509,12 +470,12 @@ GMPy_XMPZ_Method_IterSet(PyObject *self, PyObject *args, PyObject *kwargs)
 }
 
 PyDoc_STRVAR(GMPy_doc_xmpz_method_iter_clear,
-"xmpz.iter_clear(start=0, stop=-1) -> iterator\n\n"
-"Return every bit position that is clear in 'xmpz', beginning at\n"
+"x.iter_clear(start=0, stop=-1) -> collections.abc.Iterator\n\n"
+"Return every bit position that is clear in x, beginning at\n"
 "'start'. If a positive value is specified for 'stop', iteration\n"
 "is continued until 'stop' is reached. If a negative value is specified,\n"
 "iteration is continued until the last 1-bit. Note: the value of the\n"
-"underlying xmpz object can change during iteration.");
+"underlying `xmpz` object can change during iteration.");
 
 static PyObject *
 GMPy_XMPZ_Method_IterClear(PyObject *self, PyObject *args, PyObject *kwargs)
@@ -585,18 +546,13 @@ PyDoc_STRVAR(GMPy_doc_xmpz_method_sizeof,
 static PyObject *
 GMPy_XMPZ_Method_SizeOf(PyObject *self, PyObject *other)
 {
-    return PyIntOrLong_FromSize_t(sizeof(XMPZ_Object) + \
+    return PyLong_FromSize_t(sizeof(XMPZ_Object) + \
         (MPZ(self)->_mp_alloc * sizeof(mp_limb_t)));
 }
 
 static PyTypeObject GMPy_Iter_Type =
 {
-#ifdef PY3
     PyVarObject_HEAD_INIT(0, 0)
-#else
-    PyObject_HEAD_INIT(0)
-        0,                                  /* ob_size          */
-#endif
     "gmpy2 iterator",                       /* tp_name          */
     sizeof(GMPy_Iter_Object),               /* tp_basicsize     */
         0,                                  /* tp_itemsize      */

@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy_random.c                                                           *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -41,17 +39,17 @@ static void
 GMPy_RandomState_Dealloc(RandomState_Object *self)
 {
     gmp_randclear(self->state);
-    PyObject_Del(self);
+    PyObject_Free(self);
 };
 
 static PyObject *
 GMPy_RandomState_Repr(RandomState_Object *self)
 {
-    return Py_BuildValue("s", "<gmpy2.RandomState>");
+    return PyUnicode_FromString("<gmpy2.RandomState>");
 };
 
 PyDoc_STRVAR(GMPy_doc_random_state_factory,
-"random_state([seed]) -> object\n\n"
+"random_state(seed=0, /) -> object\n\n"
 "Return new object containing state information for the random number\n"
 "generator. An optional integer can be specified as the seed value.");
 
@@ -86,7 +84,7 @@ GMPy_RandomState_Factory(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpz_urandomb_function,
-"mpz_urandomb(random_state, bit_count) -> mpz\n\n"
+"mpz_urandomb(random_state, bit_count, /) -> mpz\n\n"
 "Return uniformly distributed random integer between 0 and\n"
 "2**bit_count-1.");
 
@@ -94,33 +92,37 @@ static PyObject *
 GMPy_MPZ_urandomb_Function(PyObject *self, PyObject *args)
 {
     MPZ_Object *result;
-    mp_bitcnt_t len;
+    PyObject *temp0, *temp1;
+    unsigned long len;
 
     if (PyTuple_GET_SIZE(args) != 2) {
         TYPE_ERROR("mpz_urandomb() requires 2 arguments");
         return NULL;
     }
 
-    if (!RandomState_Check(PyTuple_GET_ITEM(args, 0))) {
+    temp0 = PyTuple_GET_ITEM(args, 0);
+    temp1 = PyTuple_GET_ITEM(args, 1);
+
+    if (!RandomState_Check(temp0)) {
         TYPE_ERROR("mpz_urandomb() requires 'random_state' and 'bit_count' arguments");
         return NULL;
     }
 
-    len = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 1));
-    if (len == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
+    len = GMPy_Integer_AsUnsignedLongWithType(temp1, GMPy_ObjectType(temp1));
+    if (len == (unsigned long)(-1) && PyErr_Occurred()) {
         TYPE_ERROR("mpz_urandomb() requires 'random_state' and 'bit_count' arguments");
         return NULL;
     }
 
     if ((result = GMPy_MPZ_New(NULL))) {
-        mpz_urandomb(result->z, RANDOM_STATE(PyTuple_GET_ITEM(args, 0)), len);
+        mpz_urandomb(result->z, RANDOM_STATE(temp0), len);
     }
 
     return (PyObject*)result;
 }
 
 PyDoc_STRVAR(GMPy_doc_mpz_rrandomb_function,
-"mpz_rrandomb(random_state, bit_count) -> mpz\n\n"
+"mpz_rrandomb(random_state, bit_count, /) -> mpz\n\n"
 "Return a random integer between 0 and 2**bit_count-1 with long\n"
 "sequences of zeros and one in its binary representation.");
 
@@ -128,51 +130,59 @@ static PyObject *
 GMPy_MPZ_rrandomb_Function(PyObject *self, PyObject *args)
 {
     MPZ_Object *result;
-    mp_bitcnt_t len;
+    PyObject *temp0, *temp1;
+    unsigned long len;
 
     if (PyTuple_GET_SIZE(args) != 2) {
         TYPE_ERROR("mpz_rrandomb() requires 2 arguments");
         return NULL;
     }
 
-    if (!RandomState_Check(PyTuple_GET_ITEM(args, 0))) {
+    temp0 = PyTuple_GET_ITEM(args, 0);
+    temp1 = PyTuple_GET_ITEM(args, 1);
+
+    if (!RandomState_Check(temp0)) {
         TYPE_ERROR("mpz_rrandomb() requires 'random_state' and 'bit_count' arguments");
         return NULL;
     }
 
-    len = mp_bitcnt_t_From_Integer(PyTuple_GET_ITEM(args, 1));
+    len = GMPy_Integer_AsUnsignedLongWithType(temp1, GMPy_ObjectType(temp1));
     if (len == (mp_bitcnt_t)(-1) && PyErr_Occurred()) {
         TYPE_ERROR("mpz_rrandomb() requires 'random_state' and 'bit_count' arguments");
         return NULL;
     }
 
     if ((result = GMPy_MPZ_New(NULL))) {
-        mpz_rrandomb(result->z, RANDOM_STATE(PyTuple_GET_ITEM(args, 0)), len);
+        mpz_rrandomb(result->z, RANDOM_STATE(temp0), len);
     }
 
     return (PyObject*)result;
 }
 
 PyDoc_STRVAR(GMPy_doc_mpz_random_function,
-"mpz_random(random_state, int) -> mpz\n\n"
+"mpz_random(random_state, int, /) -> mpz\n\n"
 "Return uniformly distributed random integer between 0 and n-1.");
 
 static PyObject *
 GMPy_MPZ_random_Function(PyObject *self, PyObject *args)
 {
     MPZ_Object *result, *temp;
+    PyObject *temp0, *temp1;
 
     if (PyTuple_GET_SIZE(args) != 2) {
         TYPE_ERROR("mpz_random() requires 2 arguments");
         return NULL;
     }
 
-    if (!RandomState_Check(PyTuple_GET_ITEM(args, 0))) {
+    temp0 = PyTuple_GET_ITEM(args, 0);
+    temp1 = PyTuple_GET_ITEM(args, 1);
+
+    if (!RandomState_Check(temp0)) {
         TYPE_ERROR("mpz_random() requires 'random_state' and 'int' arguments");
         return NULL;
     }
 
-    if (!(temp = GMPy_MPZ_From_Integer(PyTuple_GET_ITEM(args, 1), NULL))) {
+    if (!(temp = GMPy_MPZ_From_IntegerWithType(temp1, GMPy_ObjectType(temp1), NULL))) {
         TYPE_ERROR("mpz_random() requires 'random_state' and 'int' arguments");
         return NULL;
     }
@@ -186,7 +196,7 @@ GMPy_MPZ_random_Function(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_random_function,
-"mpfr_random(random_state) -> mpfr\n\n"
+"mpfr_random(random_state, /) -> mpfr\n\n"
 "Return uniformly distributed number between [0,1].");
 
 static PyObject *
@@ -217,7 +227,7 @@ GMPy_MPFR_random_Function(PyObject *self, PyObject *args)
 #if MPFR_VERSION_MAJOR > 3
 
 PyDoc_STRVAR(GMPy_doc_mpfr_nrandom_function,
-"mpfr_nrandom(random_state) -> (mpfr)\n\n"
+"mpfr_nrandom(random_state, /) -> (mpfr)\n\n"
 "Return a random number with gaussian distribution.");
 
 static PyObject *
@@ -247,7 +257,7 @@ GMPy_MPFR_nrandom_Function(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(GMPy_doc_mpfr_grandom_function,
-"mpfr_grandom(random_state) -> (mpfr, mpfr)\n\n"
+"mpfr_grandom(random_state, /) -> tuple[mpfr, mpfr]\n\n"
 "Return two random numbers with gaussian distribution.");
 
 static PyObject *
@@ -294,7 +304,7 @@ GMPy_MPFR_grandom_Function(PyObject *self, PyObject *args)
 }
 #else
 PyDoc_STRVAR(GMPy_doc_mpfr_grandom_function,
-"mpfr_grandom(random_state) -> (mpfr, mpfr)\n\n"
+"mpfr_grandom(random_state, /) -> (mpfr, mpfr)\n\n"
 "Return two random numbers with gaussian distribution.");
 
 static PyObject *
@@ -339,7 +349,7 @@ GMPy_MPFR_grandom_Function(PyObject *self, PyObject *args)
 
 
 PyDoc_STRVAR(GMPy_doc_mpc_random_function,
-"mpc_random(random_state) -> mpc\n\n"
+"mpc_random(random_state, /) -> mpc\n\n"
 "Return uniformly distributed number in the unit square [0,1]x[0,1].");
 
 static PyObject *
@@ -369,39 +379,11 @@ GMPy_MPC_random_Function(PyObject *self, PyObject *args)
 
 static PyTypeObject RandomState_Type =
 {
-#ifdef PY3
     PyVarObject_HEAD_INIT(0, 0)
-#else
-    PyObject_HEAD_INIT(0)
-        0,                                  /* ob_size          */
-#endif
-    "gmpy2 random state",                   /* tp_name          */
-    sizeof(RandomState_Object),             /* tp_basicsize     */
-        0,                                  /* tp_itemsize      */
-    (destructor) GMPy_RandomState_Dealloc,  /* tp_dealloc       */
-        0,                                  /* tp_print         */
-        0,                                  /* tp_getattr       */
-        0,                                  /* tp_setattr       */
-        0,                                  /* tp_reserved      */
-    (reprfunc) GMPy_RandomState_Repr,       /* tp_repr          */
-        0,                                  /* tp_as_number     */
-        0,                                  /* tp_as_sequence   */
-        0,                                  /* tp_as_mapping    */
-        0,                                  /* tp_hash          */
-        0,                                  /* tp_call          */
-        0,                                  /* tp_str           */
-        0,                                  /* tp_getattro      */
-        0,                                  /* tp_setattro      */
-        0,                                  /* tp_as_buffer     */
-    Py_TPFLAGS_DEFAULT,                     /* tp_flags         */
-    "GMPY2 Random number generator state",  /* tp_doc           */
-        0,                                  /* tp_traverse      */
-        0,                                  /* tp_clear         */
-        0,                                  /* tp_richcompare   */
-        0,                                  /* tp_weaklistoffset*/
-        0,                                  /* tp_iter          */
-        0,                                  /* tp_iternext      */
-        0,                                  /* tp_methods       */
-        0,                                  /* tp_members       */
-        0,                                  /* tp_getset        */
+    .tp_name = "gmpy2.random_state",       
+    .tp_basicsize = sizeof(RandomState_Object),     
+    .tp_dealloc = (destructor) GMPy_RandomState_Dealloc, 
+    .tp_repr = (reprfunc) GMPy_RandomState_Repr,
+    .tp_flags = Py_TPFLAGS_DEFAULT, 
+    .tp_doc = "GMPY2 Random number generator state", 
 };

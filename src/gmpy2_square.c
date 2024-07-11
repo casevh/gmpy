@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_square.c                                                             *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -164,18 +162,12 @@ GMPy_Complex_Square(PyObject *x, CTXT_Object *context)
 }
 
 PyDoc_STRVAR(GMPy_doc_function_square,
-"square(x) -> number\n\n"
-"Return x * x. If x is an integer, then the result is an 'mpz'.\n"
-"If x is a rational, then the result is an 'mpq'. If x is a float,\n"
-"then the result is an 'mpfr'. If x is a complex number, then the\n"
-"result is an 'mpc'.");
+"square(x, /) -> mpz | mpq | mpfr | mpc\n\n"
+"Return x * x.");
 
 PyDoc_STRVAR(GMPy_doc_context_square,
-"context.square(x) -> number\n\n"
-"Return x * x. If x is an integer, then the result is an 'mpz'.\n"
-"If x is a rational, then the result is an 'mpq'. If x is a float,\n"
-"then the result is an 'mpfr'. If x is a complex number, then the\n"
-"result is an 'mpc'.");
+"context.square(x, /) -> mpz | mpq | mpfr | mpc\n\n"
+"Return x * x.");
 
 static PyObject *
 GMPy_Number_Square(PyObject *x, CTXT_Object *context)
@@ -222,4 +214,3 @@ GMPy_Context_Square(PyObject *self, PyObject *other)
 
     return GMPy_Number_Square(other, context);
 }
-

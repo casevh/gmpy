@@ -1,14 +1,12 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * gmpy2_context.h                                                         *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Python interface to the GMP or MPIR, MPFR, and MPC multiple precision   *
+ * Python interface to the GMP, MPFR, and MPC multiple precision           *
  * libraries.                                                              *
  *                                                                         *
- * Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,               *
- *           2008, 2009 Alex Martelli                                      *
+ * Copyright 2000 - 2009 Alex Martelli                                     *
  *                                                                         *
- * Copyright 2008, 2009, 2010, 2011, 2012, 2013, 2014,                     *
- *           2015, 2016, 2017, 2018, 2019, 2020 Case Van Horsen            *
+ * Copyright 2008 - 2024 Case Van Horsen                                   *
  *                                                                         *
  * This file is part of GMPY2.                                             *
  *                                                                         *
@@ -44,19 +42,34 @@ extern "C" {
 /* The actual typedefs have been moved to gmpy2_types.h. */
 
 static PyTypeObject CTXT_Type;
-static PyTypeObject CTXT_Manager_Type;
 
-#ifdef WITHOUT_THREADS
-#define CURRENT_CONTEXT(obj) obj = module_context;
-#else
-#define CURRENT_CONTEXT(obj) obj = GMPy_current_context();
-#endif
+/* CHECK_CONTEXT returns a borrowed reference. */
+#define CHECK_CONTEXT(context)                          \
+    if (!context) {                                     \
+        context = (CTXT_Object*)GMPy_CTXT_Get(NULL, NULL); \
+        if (context == NULL) {                          \
+            return NULL;                                \
+        }                                               \
+        Py_DECREF(context);                             \
+    }
 
-#define CHECK_CONTEXT(context) \
-    if (!context) CURRENT_CONTEXT(context);
+#define CHECK_CONTEXT_M1(context)                          \
+    if (!context) {                                        \
+        context = (CTXT_Object*)GMPy_CTXT_Get(NULL, NULL);    \
+        if (context == NULL) {                             \
+            return -1;                                     \
+        }                                                  \
+        Py_DECREF(context);                                \
+    }
+
+#define GMPY_MAYBE_BEGIN_ALLOW_THREADS(context) { \
+        PyThreadState *_save; \
+        _save = GET_THREAD_MODE(context) ? PyEval_SaveThread() : NULL;
+#define GMPY_MAYBE_END_ALLOW_THREADS(context) \
+        if (_save) PyEval_RestoreThread(_save); \
+    } \
 
 #define CTXT_Check(v) (((PyObject*)v)->ob_type == &CTXT_Type)
-#define CTXT_Manager_Check(v) (((PyObject*)v)->ob_type == &CTXT_Manager_Type)
 
 #define GET_MPFR_PREC(c) (c->ctx.mpfr_prec)
 #define GET_REAL_PREC(c) ((c->ctx.real_prec==GMPY_DEFAULT)?GET_MPFR_PREC(c):c->ctx.real_prec)
@@ -68,29 +81,21 @@ static PyTypeObject CTXT_Manager_Type;
 
 #define GET_DIV_MODE(c) (c->ctx.rational_division)
 
+#define GET_THREAD_MODE(c) (c->ctx.allow_release_gil)
 
-static PyObject *    GMPy_CTXT_Manager_New(void);
-static void          GMPy_CTXT_Manager_Dealloc(CTXT_Manager_Object *self);
-static PyObject *    GMPy_CTXT_Manager_Repr_Slot(CTXT_Manager_Object *self);
-static PyObject *    GMPy_CTXT_Manager_Enter(PyObject *self, PyObject *args);
-static PyObject *    GMPy_CTXT_Manager_Exit(PyObject *self, PyObject *args);
 
 static PyObject *    GMPy_CTXT_New(void);
 static void          GMPy_CTXT_Dealloc(CTXT_Object *self);
 static PyObject *    GMPy_CTXT_Repr_Slot(CTXT_Object *self);
 static PyObject *    GMPy_CTXT_Get(PyObject *self, PyObject *args);
 static PyObject *    GMPy_CTXT_Local(PyObject *self, PyObject *args, PyObject *kwargs);
-static PyObject *    GMPy_CTXT_Context(PyObject *self, PyObject *args, PyObject *kwargs);
+static PyObject *    GMPy_CTXT_Context(PyTypeObject *type, PyObject *args, PyObject *kwargs);
 static PyObject *    GMPy_CTXT_Set(PyObject *self, PyObject *other);
 static PyObject *    GMPy_CTXT_Clear_Flags(PyObject *self, PyObject *args);
 static PyObject *    GMPy_CTXT_Copy(PyObject *self, PyObject *other);
 static PyObject *    GMPy_CTXT_ieee(PyObject *self, PyObject *args, PyObject *kwargs);
 static PyObject *    GMPy_CTXT_Enter(PyObject *self, PyObject *args);
 static PyObject *    GMPy_CTXT_Exit(PyObject *self, PyObject *args);
-
-#ifndef WITHOUT_THREADS
-static CTXT_Object * GMPy_current_context(void);
-#endif
 
 #ifdef __cplusplus
 }
